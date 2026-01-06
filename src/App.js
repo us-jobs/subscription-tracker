@@ -112,12 +112,26 @@ const SubscriptionTracker = () => {
   const startCamera = async () => {
     setAddMethod('camera');
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { 
+          facingMode: 'environment',
+          width: { ideal: 1920 },
+          height: { ideal: 1080 }
+        } 
+      });
       streamRef.current = stream;
-      if (videoRef.current) videoRef.current.srcObject = stream;
       setShowCamera(true);
+      
+      // Wait a moment for video element to be ready
+      setTimeout(() => {
+        if (videoRef.current && streamRef.current) {
+          videoRef.current.srcObject = streamRef.current;
+          videoRef.current.play().catch(err => console.log('Play error:', err));
+        }
+      }, 100);
     } catch (err) {
-      alert('Camera access denied');
+      console.error('Camera error:', err);
+      alert('Camera access denied. Please allow camera permission in your browser settings.');
       setAddMethod('manual');
     }
   };
@@ -126,10 +140,26 @@ const SubscriptionTracker = () => {
     if (!videoRef.current || !canvasRef.current) return;
     const canvas = canvasRef.current;
     const video = videoRef.current;
+    
+    // Make sure video is playing
+    if (video.readyState !== video.HAVE_ENOUGH_DATA) {
+      alert('Camera not ready. Please wait a moment and try again.');
+      return;
+    }
+    
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
-    canvas.getContext('2d').drawImage(video, 0, 0);
-    canvas.toBlob(blob => processImage(blob), 'image/jpeg');
+    
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0);
+    
+    canvas.toBlob(blob => {
+      if (blob) {
+        processImage(blob);
+      } else {
+        alert('Failed to capture image. Please try again.');
+      }
+    }, 'image/jpeg', 0.95);
   };
 
   const handleFileUpload = (e) => {
@@ -143,39 +173,67 @@ const SubscriptionTracker = () => {
   const processImage = async (imageBlob) => {
     setIsProcessing(true);
     stopCamera();
+    
     try {
       const imageUrl = URL.createObjectURL(imageBlob);
       const { default: Tesseract } = await import('tesseract.js');
-      const result = await Tesseract.recognize(imageUrl, 'eng');
-      const parsed = parseReceiptText(result.data.text);
       
-      if (parsed.name || parsed.cost || parsed.date) {
-        setFormData(prev => ({
-          ...prev,
-          name: parsed.name || prev.name,
-          cost: parsed.cost || prev.cost,
-          nextBillingDate: parsed.date || prev.nextBillingDate
-        }));
-        
-        const missing = [];
-        if (!parsed.name) missing.push('name');
-        if (!parsed.cost) missing.push('cost');
-        if (!parsed.date) missing.push('date');
-        
-        setShowAddForm(true);
-        if (missing.length > 0) {
-          alert(`✅ Scanned! Fill: ${missing.join(', ')}`);
-        } else {
-          alert('✅ Done! Verify & save');
+      const result = await Tesseract.recognize(imageUrl, 'eng', {
+        logger: info => {
+          if (info.status === 'recognizing text') {
+            console.log(`Processing: ${Math.round(info.progress * 100)}%`);
+          }
         }
+      });
+      
+      const text = result.data.text;
+      console.log('Extracted text:', text);
+      
+      const parsed = parseReceiptText(text);
+      
+      // Check what was found and what's missing
+      const found = [];
+      const missing = [];
+      
+      if (parsed.name) {
+        found.push('Name');
+        setFormData(prev => ({ ...prev, name: parsed.name }));
       } else {
-        alert('⚠️ No data found. Enter manually');
+        missing.push('Name');
+      }
+      
+      if (parsed.cost) {
+        found.push('Cost');
+        setFormData(prev => ({ ...prev, cost: parsed.cost }));
+      } else {
+        missing.push('Cost');
+      }
+      
+      if (parsed.date) {
+        found.push('Date');
+        setFormData(prev => ({ ...prev, nextBillingDate: parsed.date }));
+      } else {
+        missing.push('Date');
+      }
+      
+      URL.revokeObjectURL(imageUrl);
+      
+      // Show appropriate message based on what was found
+      if (found.length === 0) {
+        alert('❌ Could not extract any information from the image.\n\nPlease make sure the image:\n• Has clear text\n• Shows subscription name or service\n• Shows amount/price\n• Has good lighting\n\nYou can try again or enter details manually.');
         setAddMethod('manual');
         setShowAddForm(true);
+      } else if (missing.length > 0) {
+        alert(`✅ Found: ${found.join(', ')}\n\n⚠️ Missing: ${missing.join(', ')}\n\nPlease fill in the missing information.`);
+        setShowAddForm(true);
+      } else {
+        alert('✅ All details extracted successfully!\n\nPlease verify the information and save.');
+        setShowAddForm(true);
       }
-      URL.revokeObjectURL(imageUrl);
+      
     } catch (error) {
-      alert('❌ Failed. Try again');
+      console.error('OCR Error:', error);
+      alert('❌ Failed to process image.\n\nThis could be due to:\n• Poor image quality\n• No recognizable text\n• Network issues\n\nPlease try again with a clearer image or enter details manually.');
       setAddMethod('manual');
       setShowAddForm(true);
     } finally {
@@ -385,15 +443,35 @@ const SubscriptionTracker = () => {
               <h2 className="text-base sm:text-lg font-bold text-gray-800">📸 Camera</h2>
               <button onClick={stopCamera} className="text-gray-500"><X size={20} /></button>
             </div>
-            <video ref={videoRef} autoPlay playsInline className="w-full rounded-lg mb-3" />
+            <div className="relative bg-black rounded-lg overflow-hidden mb-3" style={{ minHeight: '300px' }}>
+              <video 
+                ref={videoRef} 
+                autoPlay 
+                playsInline 
+                muted
+                className="w-full h-auto"
+                style={{ maxHeight: '60vh' }}
+              />
+              {!videoRef.current?.srcObject && (
+                <div className="absolute inset-0 flex items-center justify-center text-white">
+                  <div className="text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-2"></div>
+                    <div className="text-sm">Loading camera...</div>
+                  </div>
+                </div>
+              )}
+            </div>
             <div className="flex gap-2">
               <button onClick={captureImage} className="flex-1 bg-green-500 text-white px-4 py-2 sm:py-3 rounded-lg hover:bg-green-600 font-medium text-sm sm:text-base">
-                Capture
+                📸 Capture
               </button>
               <button onClick={stopCamera} className="flex-1 bg-gray-500 text-white px-4 py-2 sm:py-3 rounded-lg hover:bg-gray-600 font-medium text-sm sm:text-base">
                 Cancel
               </button>
             </div>
+            <p className="text-xs text-gray-500 text-center mt-2">
+              Point camera at receipt or subscription email
+            </p>
           </div>
         )}
         <canvas ref={canvasRef} className="hidden" />
