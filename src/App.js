@@ -170,12 +170,63 @@ const SubscriptionTracker = () => {
     }
   };
 
+  const preprocessImage = (imageBlob) => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      
+      img.onload = () => {
+        canvas.width = img.width;
+        canvas.height = img.height;
+        
+        // Draw original image
+        ctx.drawImage(img, 0, 0);
+        
+        // Get image data
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+        
+        // Increase contrast and brightness for better OCR
+        for (let i = 0; i < data.length; i += 4) {
+          // Convert to grayscale
+          const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
+          
+          // Increase contrast
+          const contrast = 1.5;
+          const factor = (259 * (contrast + 255)) / (255 * (259 - contrast));
+          let pixel = factor * (avg - 128) + 128;
+          
+          // Increase brightness
+          pixel = pixel + 50;
+          
+          // Clamp values
+          pixel = Math.max(0, Math.min(255, pixel));
+          
+          // Apply to all channels
+          data[i] = data[i + 1] = data[i + 2] = pixel;
+        }
+        
+        ctx.putImageData(imageData, 0, 0);
+        
+        canvas.toBlob((blob) => {
+          resolve(blob);
+        }, 'image/jpeg', 0.95);
+      };
+      
+      img.src = URL.createObjectURL(imageBlob);
+    });
+  };
+
   const processImage = async (imageBlob) => {
     setIsProcessing(true);
     stopCamera();
     
     try {
-      const imageUrl = URL.createObjectURL(imageBlob);
+      // Preprocess image for better OCR
+      const processedBlob = await preprocessImage(imageBlob);
+      const imageUrl = URL.createObjectURL(processedBlob);
+      
       const { default: Tesseract } = await import('tesseract.js');
       
       const result = await Tesseract.recognize(imageUrl, 'eng', {
@@ -187,89 +238,153 @@ const SubscriptionTracker = () => {
       });
       
       const text = result.data.text;
-      console.log('Extracted text:', text);
+      console.log('Full extracted text:', text);
       
       const parsed = parseReceiptText(text);
       
-      // Check what was found and what's missing
       const found = [];
       const missing = [];
       
       if (parsed.name) {
         found.push('Name');
-        setFormData(prev => ({ ...prev, name: parsed.name }));
       } else {
         missing.push('Name');
       }
       
       if (parsed.cost) {
         found.push('Cost');
-        setFormData(prev => ({ ...prev, cost: parsed.cost }));
       } else {
         missing.push('Cost');
       }
       
       if (parsed.date) {
         found.push('Date');
-        setFormData(prev => ({ ...prev, nextBillingDate: parsed.date }));
       } else {
         missing.push('Date');
       }
       
+      setFormData(prev => ({
+        ...prev,
+        name: parsed.name || prev.name,
+        cost: parsed.cost || prev.cost,
+        nextBillingDate: parsed.date || prev.nextBillingDate
+      }));
+      
+      setShowAddForm(true);
+      
       URL.revokeObjectURL(imageUrl);
       
-      // Show appropriate message based on what was found
       if (found.length === 0) {
-        alert('❌ Could not extract any information from the image.\n\nPlease make sure the image:\n• Has clear text\n• Shows subscription name or service\n• Shows amount/price\n• Has good lighting\n\nYou can try again or enter details manually.');
-        setAddMethod('manual');
-        setShowAddForm(true);
+        alert('❌ Could not extract information\n\nThe image might have:\n• Dark background\n• Stylized text\n• Low contrast\n\nTip: Try taking a photo of:\n• Email receipt (white background)\n• Paper bill\n• Screenshot with good contrast\n\nPlease enter the details manually below.');
       } else if (missing.length > 0) {
-        alert(`✅ Found: ${found.join(', ')}\n\n⚠️ Missing: ${missing.join(', ')}\n\nPlease fill in the missing information.`);
-        setShowAddForm(true);
+        alert(`✅ Found: ${found.join(', ')}\n\n⚠️ Missing: ${missing.join(', ')}\n\nPlease fill in the missing fields below.`);
       } else {
-        alert('✅ All details extracted successfully!\n\nPlease verify the information and save.');
-        setShowAddForm(true);
+        alert('✅ All details extracted!\n\nPlease verify the information below and save.');
       }
       
     } catch (error) {
       console.error('OCR Error:', error);
-      alert('❌ Failed to process image.\n\nThis could be due to:\n• Poor image quality\n• No recognizable text\n• Network issues\n\nPlease try again with a clearer image or enter details manually.');
-      setAddMethod('manual');
       setShowAddForm(true);
+      alert('❌ Processing failed\n\nPlease enter details manually below.\n\nError: ' + (error.message || 'Unknown error'));
     } finally {
       setIsProcessing(false);
     }
   };
 
   const parseReceiptText = (text) => {
-    const lines = text.split('\n').map(l => l.trim());
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
     let name = '', cost = '', date = '';
-    const services = ['netflix', 'spotify', 'amazon', 'disney', 'hulu', 'apple', 'youtube', 'prime'];
+    
+    console.log('All extracted lines:', lines);
+    
+    const services = [
+      'netflix', 'spotify', 'amazon', 'prime', 'disney', 'hulu', 'apple', 'youtube',
+      'jio', 'airtel', 'hotstar', 'zee5', 'sonyliv', 'voot', 'mx player',
+      'cricbuzz', 'cricket', 'plan', 'subscription', 'membership', 'offer'
+    ];
+    
+    // Look for service names
     for (const line of lines) {
       const lower = line.toLowerCase();
+      
       for (const service of services) {
         if (lower.includes(service)) {
-          name = service.charAt(0).toUpperCase() + service.slice(1);
-          break;
+          if (line.length < 50 && line.length > 2) {
+            name = line;
+            break;
+          }
         }
       }
-    }
-    for (const line of lines) {
-      const priceMatch = line.match(/\$?\s*(\d+[.,]\d{2})/);
-      if (priceMatch) { cost = priceMatch[1].replace(',', '.'); break; }
-    }
-    for (const line of lines) {
-      const dateMatch = line.match(/(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})/);
-      if (dateMatch) {
-        const parts = dateMatch[1].split(/[-/]/);
-        if (parts.length === 3) {
-          let year = parts[2];
-          if (year.length === 2) year = '20' + year;
-          date = `${year}-${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}`;
-        }
-        break;
+      
+      // Pattern: "X Month Plan", "X Year Plan"
+      if (!name && /\d+\s*(month|year|day)\s*(plan|subscription|membership)/i.test(line)) {
+        name = line;
       }
+      
+      if (name) break;
     }
+    
+    // Look for price - IMPROVED to avoid matching single digits from dates
+    for (const line of lines) {
+      // Skip lines that are just dates or have year patterns
+      if (/^\d{1,2}[-/]\d{1,2}[-/]\d{2,4}$/.test(line.trim())) continue;
+      if (/20\d{2}/.test(line) && !/\$|USD|INR|Rs|₹/.test(line)) continue;
+      
+      const pricePatterns = [
+        // Must have currency indicator or be followed by currency
+        /(?:USD|INR|Rs\.?|₹)\s*(\d{2,6}(?:[.,]\d{2})?)/i,
+        /\$\s*(\d{2,6}(?:[.,]\d{2})?)/,
+        /(\d{2,6}(?:[.,]\d{2})?)\s*(?:USD|INR|Rs|rupees|dollars)/i,
+        // Standalone numbers only if they're 2+ digits and reasonable price range
+        /\b(\d{2,5})\b(?!\s*(?:day|month|year|mar|jan|feb|apr|may|jun|jul|aug|sep|oct|nov|dec))/i
+      ];
+      
+      for (const pattern of pricePatterns) {
+        const match = line.match(pattern);
+        if (match) {
+          let amount = match[1].replace(',', '.');
+          const numAmount = parseFloat(amount);
+          // Must be between 1 and 999999, and not look like a year
+          if (numAmount >= 1 && numAmount <= 999999 && numAmount < 2000) {
+            cost = amount;
+            break;
+          }
+        }
+      }
+      if (cost) break;
+    }
+    
+    // Look for dates
+    for (const line of lines) {
+      const datePatterns = [
+        /(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[,\s]+(\d{4})/i,
+        /(?:expires?\s*(?:on|in)?\s*:?\s*)?(\d{1,2})[-/\s]+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[-/\s,]+(\d{4})/i,
+        /(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(\d{1,2})[,\s]+(\d{4})/i,
+        /(\d{1,2})[-/](\d{1,2})[-/](\d{4})/
+      ];
+      
+      for (const pattern of datePatterns) {
+        const match = line.match(pattern);
+        if (match) {
+          try {
+            const dateStr = match[0].replace(/expires?\s*(?:on|in)?\s*:?\s*/i, '');
+            const parsed = new Date(dateStr);
+            if (!isNaN(parsed.getTime())) {
+              const year = parsed.getFullYear();
+              const month = String(parsed.getMonth() + 1).padStart(2, '0');
+              const day = String(parsed.getDate()).padStart(2, '0');
+              date = `${year}-${month}-${day}`;
+              break;
+            }
+          } catch (e) {
+            console.log('Date parse error:', e);
+          }
+        }
+      }
+      if (date) break;
+    }
+    
+    console.log('Parsed results:', { name, cost, date });
     return { name, cost, date };
   };
 
