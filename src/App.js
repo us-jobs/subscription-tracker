@@ -19,6 +19,10 @@ const SubscriptionTracker = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [showImageZoom, setShowImageZoom] = useState(false);
   const [zoomedImage, setZoomedImage] = useState('');
+  const [addMethod, setAddMethod] = useState('manual');
+  const [showReminderSettings, setShowReminderSettings] = useState(false);
+  const [reminderDays, setReminderDays] = useState([1, 3]); // Default: 1 and 3 days before
+  const [customDays, setCustomDays] = useState('');
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
@@ -37,6 +41,11 @@ const SubscriptionTracker = () => {
       setShowNamePrompt(true);
     }
     
+    const savedReminderDays = localStorage.getItem('reminderDays');
+    if (savedReminderDays) {
+      setReminderDays(JSON.parse(savedReminderDays));
+    }
+    
     if ('Notification' in window && Notification.permission === 'granted') {
       setNotificationsEnabled(true);
     }
@@ -45,6 +54,10 @@ const SubscriptionTracker = () => {
   useEffect(() => {
     localStorage.setItem('subscriptions', JSON.stringify(subscriptions));
   }, [subscriptions]);
+
+  useEffect(() => {
+    localStorage.setItem('reminderDays', JSON.stringify(reminderDays));
+  }, [reminderDays]);
 
   const saveName = () => {
     if (tempName.trim()) {
@@ -60,9 +73,26 @@ const SubscriptionTracker = () => {
       setNotificationsEnabled(permission === 'granted');
       if (permission === 'granted') {
         new Notification('Notifications Enabled!', {
-          body: 'You will now receive reminders'
+          body: `You'll get reminders ${reminderDays.sort((a,b) => b - a).join(', ')} days before charges`
         });
+        setShowReminderSettings(true);
       }
+    }
+  };
+
+  const toggleReminderDay = (day) => {
+    if (reminderDays.includes(day)) {
+      setReminderDays(reminderDays.filter(d => d !== day));
+    } else {
+      setReminderDays([...reminderDays, day].sort((a, b) => a - b));
+    }
+  };
+
+  const addCustomDay = () => {
+    const day = parseInt(customDays);
+    if (day && day > 0 && day <= 30 && !reminderDays.includes(day)) {
+      setReminderDays([...reminderDays, day].sort((a, b) => a - b));
+      setCustomDays('');
     }
   };
 
@@ -364,26 +394,37 @@ const SubscriptionTracker = () => {
           let amount = match[1].replace(',', '.');
           const numAmount = parseFloat(amount);
           
+          // STRICT: Must be reasonable price AND have some currency context
+          // Reject if it's just a standalone number without currency indicator
+          const hasCurrencyContext = /[\$£€¥₹₩₪₱₡₵₦₨₴₸]|USD|INR|EUR|GBP|price|cost|amount|pay|charge|fee|bill/i.test(line);
+          
           if (numAmount >= 0.01 && numAmount <= 999999 && numAmount < 2000) {
-            potentialPrices.push({
-              amount: amount,
-              value: numAmount,
-              priority: priority,
-              line: line
-            });
+            // Only add if it has currency context OR it's high priority
+            if (hasCurrencyContext || priority >= 8) {
+              potentialPrices.push({
+                amount: amount,
+                value: numAmount,
+                priority: priority,
+                line: line,
+                hasCurrency: hasCurrencyContext
+              });
+            }
           }
         }
       }
     }
     
+    // Sort by: 1) has currency, 2) priority, 3) value
     potentialPrices.sort((a, b) => {
+      if (a.hasCurrency !== b.hasCurrency) return b.hasCurrency ? 1 : -1;
       if (b.priority !== a.priority) return b.priority - a.priority;
       return b.value - a.value;
     });
     
     console.log('Potential prices found:', potentialPrices);
     
-    if (potentialPrices.length > 0) {
+    // Pick the best one ONLY if it has currency context
+    if (potentialPrices.length > 0 && potentialPrices[0].hasCurrency) {
       cost = potentialPrices[0].amount;
     }
     
@@ -495,25 +536,25 @@ const SubscriptionTracker = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 p-2 sm:p-4">
+    <div className="min-h-screen bg-gray-50 p-2 sm:p-4">
       {showNamePrompt && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md">
-            <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-4">Welcome! 👋</h2>
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md">
+            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4">Welcome! 👋</h2>
             <p className="text-gray-600 mb-4 text-sm sm:text-base">What's your name?</p>
             <input
               type="text"
               value={tempName}
               onChange={(e) => setTempName(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && saveName()}
-              className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-purple-500 mb-4"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent mb-4"
               placeholder="Enter your name"
               autoFocus
             />
             <button
               onClick={saveName}
               disabled={!tempName.trim()}
-              className="w-full bg-purple-500 text-white px-6 py-3 rounded-lg hover:bg-purple-600 font-medium disabled:bg-gray-300"
+              className="w-full bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 font-medium disabled:bg-gray-300 disabled:cursor-not-allowed transition"
             >
               Get Started
             </button>
@@ -522,35 +563,117 @@ const SubscriptionTracker = () => {
       )}
 
       <div className="max-w-6xl mx-auto">
-        <div className="bg-white rounded-2xl shadow-lg p-4 sm:p-6 mb-4 sm:mb-6">
+        {/* SEO Hero Section */}
+        <div className="bg-gradient-to-br from-indigo-600 via-indigo-700 to-indigo-800 rounded-2xl shadow-xl p-6 sm:p-8 mb-6 text-white">
+          <h1 className="text-2xl sm:text-4xl font-bold mb-3 leading-tight">SubTrack - Never Miss a Subscription Payment</h1>
+          <p className="text-base sm:text-xl text-indigo-100 mb-4 leading-relaxed hidden sm:block">
+            Smart subscription manager with AI-powered receipt scanning. Track all your subscriptions, get reminders before charges, and save money by canceling unused services.
+          </p>
+          <div className="flex flex-wrap gap-4 text-sm sm:text-base">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-white bg-opacity-20 rounded-lg flex items-center justify-center backdrop-blur-sm">📸</div>
+              <span className="text-indigo-50">AI Receipt Scanner</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-white bg-opacity-20 rounded-lg flex items-center justify-center backdrop-blur-sm">🔔</div>
+              <span className="text-indigo-50">Smart Reminders</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-white bg-opacity-20 rounded-lg flex items-center justify-center backdrop-blur-sm">💰</div>
+              <span className="text-indigo-50">Save Money</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-4 sm:p-6 mb-4 sm:mb-6">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-purple-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-sm sm:text-base">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-full flex items-center justify-center text-white font-bold text-sm sm:text-base shadow-md">
                 {userName ? getInitials(userName) : <User size={20} />}
               </div>
               <div>
-                <h1 className="text-lg sm:text-2xl font-bold text-gray-800">{userName || 'SubTrack'}</h1>
+                <h1 className="text-lg sm:text-2xl font-bold text-gray-900">{userName || 'SubTrack'}</h1>
                 <p className="text-xs sm:text-sm text-gray-500">Manage subscriptions</p>
               </div>
             </div>
             <button onClick={requestNotifications}
-              className={`p-2 sm:p-3 rounded-lg ${notificationsEnabled ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}
+              className={`p-2 sm:p-3 rounded-lg transition ${notificationsEnabled ? 'bg-green-50 text-green-600 hover:bg-green-100' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
               title={notificationsEnabled ? 'Notifications On' : 'Enable Notifications'}>
               {notificationsEnabled ? <Bell size={20} /> : <BellOff size={20} />}
             </button>
+            {notificationsEnabled && (
+              <button 
+                onClick={() => setShowReminderSettings(!showReminderSettings)}
+                className="p-2 sm:p-3 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition text-xs sm:text-sm font-medium hidden sm:block"
+                title="Reminder Settings"
+              >
+                ⚙️
+              </button>
+            )}
           </div>
+
+          {/* Reminder Settings */}
+          {showReminderSettings && notificationsEnabled && (
+            <div className="mt-4 p-4 bg-indigo-50 border border-indigo-200 rounded-lg">
+              <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                🔔 Reminder Settings
+              </h3>
+              <p className="text-xs text-gray-600 mb-3">Choose when to get reminders before charges:</p>
+              
+              <div className="flex flex-wrap gap-2 mb-3">
+                {[1, 3, 7, 14, 30].map(day => (
+                  <button
+                    key={day}
+                    onClick={() => toggleReminderDay(day)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                      reminderDays.includes(day)
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    {day} day{day > 1 ? 's' : ''}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  min="1"
+                  max="30"
+                  value={customDays}
+                  onChange={(e) => setCustomDays(e.target.value)}
+                  placeholder="Custom days"
+                  className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                />
+                <button
+                  onClick={addCustomDay}
+                  disabled={!customDays}
+                  className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-medium hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition"
+                >
+                  Add
+                </button>
+              </div>
+
+              {reminderDays.length > 0 && (
+                <div className="mt-3 text-xs text-gray-600">
+                  Active reminders: <span className="font-semibold text-indigo-600">{reminderDays.sort((a,b) => a - b).join(', ')} days before</span>
+                </div>
+              )}
+            </div>
+          )}
           
           {subscriptions.length > 0 && (
             <div className="grid grid-cols-3 gap-2 sm:gap-4">
-              <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl p-3 sm:p-4 text-white">
+              <div className="bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-xl p-3 sm:p-4 text-white shadow-md">
                 <div className="text-xs opacity-90">Monthly</div>
                 <div className="text-lg sm:text-2xl font-bold">${totals.monthly}</div>
               </div>
-              <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-3 sm:p-4 text-white">
+              <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-3 sm:p-4 text-white shadow-md">
                 <div className="text-xs opacity-90">Yearly</div>
                 <div className="text-lg sm:text-2xl font-bold">${totals.yearly}</div>
               </div>
-              <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl p-3 sm:p-4 text-white">
+              <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-xl p-3 sm:p-4 text-white shadow-md">
                 <div className="text-xs opacity-90">Active</div>
                 <div className="text-lg sm:text-2xl font-bold">{subscriptions.length}</div>
               </div>
@@ -637,14 +760,19 @@ const SubscriptionTracker = () => {
                 </div>
               )}
             </div>
-            <div className="flex gap-2">
-              <button onClick={captureImage} className="flex-1 bg-green-500 text-white px-4 py-2 sm:py-3 rounded-lg hover:bg-green-600 font-medium text-sm sm:text-base">
-                📸 Capture
-              </button>
-              <button onClick={stopCamera} className="flex-1 bg-gray-500 text-white px-4 py-2 sm:py-3 rounded-lg hover:bg-gray-600 font-medium text-sm sm:text-base">
-                Cancel
-              </button>
-            </div>
+            <button 
+              onClick={captureImage} 
+              className="w-full bg-green-500 text-white px-4 py-3 rounded-lg hover:bg-green-600 font-medium text-sm sm:text-base mb-2 flex items-center justify-center gap-2"
+            >
+              <Camera size={20} />
+              📸 Capture Photo
+            </button>
+            <button 
+              onClick={stopCamera} 
+              className="w-full bg-gray-500 text-white px-4 py-3 rounded-lg hover:bg-gray-600 font-medium text-sm sm:text-base"
+            >
+              Cancel
+            </button>
             <p className="text-xs text-gray-500 text-center mt-2">
               Point camera at receipt or subscription email
             </p>
@@ -660,30 +788,6 @@ const SubscriptionTracker = () => {
               </h2>
               <button onClick={resetForm} className="text-gray-500"><X size={20} /></button>
             </div>
-
-            {/* Image Preview with Remove Option */}
-            {formData.image && (
-              <div className="mb-4 relative">
-                <div className="relative inline-block">
-                  <img 
-                    src={formData.image} 
-                    alt="Preview" 
-                    className="w-full max-w-xs rounded-lg border-2 border-purple-200 cursor-pointer hover:opacity-90 transition"
-                    onClick={() => zoomImage(formData.image)}
-                  />
-                  <button
-                    onClick={removeImage}
-                    className="absolute top-2 right-2 bg-red-500 text-white p-2 rounded-full hover:bg-red-600 shadow-lg"
-                    title="Remove image"
-                  >
-                    <X size={16} />
-                  </button>
-                </div>
-                <p className="text-xs text-gray-500 mt-2">
-                  Click image to zoom • Click X to remove and capture/upload new
-                </p>
-              </div>
-            )}
             
             <div className="space-y-3">
               <div>
@@ -750,14 +854,51 @@ const SubscriptionTracker = () => {
                 </div>
               )}
               <div className="flex gap-2 pt-2">
-                <button onClick={resetForm} className="flex-1 px-4 py-2 border-2 border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-sm">
+                <button onClick={resetForm} className="flex-1 px-4 py-2 border-2 border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-sm transition text-gray-700">
                   Cancel
                 </button>
-                <button onClick={handleSubmit} className="flex-1 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 flex items-center justify-center gap-2 font-medium text-sm">
+                <button onClick={handleSubmit} className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center justify-center gap-2 font-medium text-sm transition shadow-sm">
                   <Check size={16} /> {editingId ? 'Update' : 'Add'}
                 </button>
               </div>
             </div>
+
+            {/* Image Preview BELOW Form */}
+            {formData.image && (
+              <div className="mt-6 pt-6 border-t">
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="text-sm font-semibold text-gray-700">Captured Receipt</h3>
+                  {addMethod === 'camera' ? (
+                    <button
+                      onClick={() => { removeImage(); startCamera(); }}
+                      className="text-xs sm:text-sm bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded-lg hover:bg-indigo-200 flex items-center gap-1 transition"
+                    >
+                      <Camera size={14} />
+                      Take Photo Again
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => { removeImage(); fileInputRef.current?.click(); }}
+                      className="text-xs sm:text-sm bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg hover:bg-blue-200 flex items-center gap-1 transition"
+                    >
+                      <Upload size={14} />
+                      Upload Different
+                    </button>
+                  )}
+                </div>
+                <div className="relative">
+                  <img 
+                    src={formData.image} 
+                    alt="Receipt" 
+                    className="w-full rounded-lg border-2 border-gray-200 cursor-pointer hover:opacity-90 transition"
+                    onClick={() => zoomImage(formData.image)}
+                  />
+                  <p className="text-xs text-gray-500 mt-2 text-center">
+                    Click to zoom • Use button above to retake/reupload
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -857,10 +998,134 @@ const SubscriptionTracker = () => {
         )}
 
         {subscriptions.length === 0 && !showAddForm && !showCamera && (
-          <div className="bg-white rounded-xl shadow-lg p-8 text-center">
+          <div className="bg-white rounded-xl shadow-lg p-8 text-center mb-6">
             <div className="text-6xl mb-4">🎯</div>
             <h3 className="text-lg font-bold text-gray-800 mb-2">No Subscriptions Yet</h3>
             <p className="text-sm text-gray-500">Add your first subscription above to start tracking</p>
+          </div>
+        )}
+
+        {/* SEO Content Section */}
+        {subscriptions.length === 0 && !showAddForm && !showCamera && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-xl shadow-lg p-6">
+              <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-4">
+                Why Use SubTrack?
+              </h2>
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div className="flex gap-3">
+                  <div className="w-12 h-12 bg-indigo-50 rounded-lg flex items-center justify-center flex-shrink-0 border border-indigo-100">
+                    <span className="text-2xl">💸</span>
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-800 mb-1">Save Money</h3>
+                    <p className="text-sm text-gray-600">Track all subscriptions in one place and cancel unused services. Average user saves $200/year.</p>
+                  </div>
+                </div>
+                <div className="flex gap-3">
+                  <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <span className="text-2xl">🔔</span>
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-800 mb-1">Never Miss Payments</h3>
+                    <p className="text-sm text-gray-600">Get reminders before charges. Avoid surprise bills and overdraft fees.</p>
+                  </div>
+                </div>
+                <div className="flex gap-3">
+                  <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <span className="text-2xl">📸</span>
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-800 mb-1">AI-Powered Scanner</h3>
+                    <p className="text-sm text-gray-600">Snap a photo of receipts or emails. AI extracts subscription details automatically.</p>
+                  </div>
+                </div>
+                <div className="flex gap-3">
+                  <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <span className="text-2xl">🔒</span>
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-800 mb-1">100% Private</h3>
+                    <p className="text-sm text-gray-600">All data stored locally on your device. No accounts, no servers, complete privacy.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-lg p-6">
+              <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-4">
+                How to Use SubTrack
+              </h2>
+              <div className="space-y-4">
+                <div className="flex gap-4">
+                  <div className="w-8 h-8 bg-indigo-600 text-white rounded-full flex items-center justify-center flex-shrink-0 font-bold shadow-sm">
+                    1
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-800 mb-1">Add Your Subscriptions</h3>
+                    <p className="text-sm text-gray-600">Take a photo of your receipt, upload an image, or enter details manually. Our AI scanner extracts subscription name, cost, and billing date automatically.</p>
+                  </div>
+                </div>
+                <div className="flex gap-4">
+                  <div className="w-8 h-8 bg-indigo-600 text-white rounded-full flex items-center justify-center flex-shrink-0 font-bold shadow-sm">
+                    2
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-800 mb-1">Enable Notifications</h3>
+                    <p className="text-sm text-gray-600">Get browser notifications 1-3 days before charges. Never miss a payment or forget to cancel a free trial.</p>
+                  </div>
+                </div>
+                <div className="flex gap-4">
+                  <div className="w-8 h-8 bg-indigo-600 text-white rounded-full flex items-center justify-center flex-shrink-0 font-bold shadow-sm">
+                    3
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-800 mb-1">Track & Save</h3>
+                    <p className="text-sm text-gray-600">View total monthly and yearly spending. Identify unused subscriptions and cancel them to save money.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-gradient-to-br from-indigo-600 via-indigo-700 to-indigo-800 rounded-xl shadow-lg p-6 text-white">
+              <h2 className="text-xl sm:text-2xl font-bold mb-4">
+                Features That Make SubTrack Special
+              </h2>
+              <div className="grid sm:grid-cols-2 gap-3 text-sm">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">✓</span>
+                  <span className="text-indigo-50">AI receipt scanning with 40+ currency support</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">✓</span>
+                  <span className="text-indigo-50">Smart reminders for upcoming charges</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">✓</span>
+                  <span className="text-indigo-50">Trial period tracking with auto-alerts</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">✓</span>
+                  <span className="text-indigo-50">Works offline - no internet required</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">✓</span>
+                  <span className="text-indigo-50">Multiple accounts per service tracking</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">✓</span>
+                  <span className="text-indigo-50">Visual calendar of upcoming payments</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">✓</span>
+                  <span className="text-indigo-50">100% free - no premium plans</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">✓</span>
+                  <span className="text-indigo-50">Works on mobile, tablet, and desktop</span>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>
