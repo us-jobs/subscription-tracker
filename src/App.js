@@ -17,7 +17,8 @@ const SubscriptionTracker = () => {
   const [nameWarning, setNameWarning] = useState('');
   const [showCamera, setShowCamera] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [addMethod, setAddMethod] = useState('manual');
+  const [showImageZoom, setShowImageZoom] = useState(false);
+  const [zoomedImage, setZoomedImage] = useState('');
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
@@ -300,47 +301,60 @@ const SubscriptionTracker = () => {
     const services = [
       'netflix', 'spotify', 'amazon', 'prime', 'disney', 'hulu', 'apple', 'youtube',
       'jio', 'airtel', 'hotstar', 'zee5', 'sonyliv', 'voot', 'mx player',
-      'cricbuzz', 'cricket', 'plan', 'subscription', 'membership', 'offer'
+      'cricbuzz', 'cricket', 'plan', 'subscription', 'membership', 'offer', 'upgrade'
     ];
     
-    // Look for service names
+    // STRICT: Look for service names - must have service keyword and reasonable length
+    const potentialNames = [];
+    
     for (const line of lines) {
       const lower = line.toLowerCase();
+      let hasService = false;
       
+      // Check if contains service keyword
       for (const service of services) {
         if (lower.includes(service)) {
-          if (line.length < 50 && line.length > 2) {
-            name = line;
-            break;
-          }
+          hasService = true;
+          break;
         }
       }
       
-      if (!name && /\d+\s*(month|year|day)\s*(plan|subscription|membership)/i.test(line)) {
-        name = line;
-      }
+      // Check patterns like "X Month Plan", "X Year Plan"
+      const hasPlanPattern = /\d+\s*(month|year|day)\s*(plan|subscription|membership)/i.test(line);
       
-      if (name) break;
+      if ((hasService || hasPlanPattern) && line.length > 3 && line.length < 60) {
+        // Calculate relevance score
+        let score = 0;
+        if (hasService) score += 10;
+        if (hasPlanPattern) score += 8;
+        if (/plan|subscription|membership|offer/i.test(line)) score += 5;
+        if (line.length < 30) score += 3; // Prefer shorter, cleaner names
+        
+        potentialNames.push({ name: line, score: score });
+      }
     }
     
-    // IMPROVED: Look for ALL potential prices, then pick the most likely one
+    // Sort by score and pick the best
+    potentialNames.sort((a, b) => b.score - a.score);
+    if (potentialNames.length > 0) {
+      name = potentialNames[0].name;
+    }
+    
+    console.log('Potential names found:', potentialNames);
+    
+    // Look for ALL potential prices
     const potentialPrices = [];
     
     for (const line of lines) {
-      // Skip pure date lines
       if (/^\d{1,2}[-/]\d{1,2}[-/]\d{2,4}$/.test(line.trim())) continue;
       
       const pricePatterns = [
-        // High priority: Has clear currency indicator (expanded to all major currencies)
         { pattern: /(?:USD|INR|EUR|GBP|JPY|CNY|AUD|CAD|CHF|SGD|NZD|HKD|KRW|MXN|BRL|ZAR|RUB|SEK|NOK|DKK|PLN|TRY|AED|SAR|MYR|THB|IDR|PHP|VND|Rs\.?|₹|£|€|¥|₩|R\$|Fr|kr|zł|₺|RM|฿|Rp|₱|₫)\s*(\d{1,6}(?:[.,]\d{1,3})?)/i, priority: 10 },
         { pattern: /(\d{1,6}(?:[.,]\d{1,3})?)\s*(?:USD|INR|EUR|GBP|JPY|CNY|AUD|CAD|CHF|SGD|NZD|HKD|KRW|MXN|BRL|ZAR|RUB|SEK|NOK|DKK|PLN|TRY|AED|SAR|MYR|THB|IDR|PHP|VND|dollars?|rupees?|euros?|pounds?|yen|yuan|francs?|kronor?|kroner?|złoty|lira|ringgit|baht|rupiah|pesos?|dong)/i, priority: 10 },
-        // Currency symbols at start or end
         { pattern: /[\$£€¥₹₩₪₱₡₵₦₨₴₸]\s*(\d{1,6}(?:[.,]\d{1,3})?)/i, priority: 10 },
         { pattern: /(\d{1,6}(?:[.,]\d{1,3})?)\s*[\$£€¥₹₩₪₱₡₵₦₨₴₸]/i, priority: 10 },
-        // Medium priority: Near money-related words
         { pattern: /(?:price|cost|amount|total|pay|charge|fee|bill|payment)[:=\s]*(\d{2,6}(?:[.,]\d{1,3})?)/i, priority: 8 },
         { pattern: /(\d{2,6}(?:[.,]\d{1,3})?)\s*(?:only|off|discount|per|each)/i, priority: 7 },
-        // Lower priority: Standalone numbers (but reasonable price range)
         { pattern: /\b(\d{2,4})\b(?!\s*(?:day|month|year|mar|jan|feb|apr|may|jun|jul|aug|sep|oct|nov|dec|days|months|years))/i, priority: 5 }
       ];
       
@@ -350,7 +364,6 @@ const SubscriptionTracker = () => {
           let amount = match[1].replace(',', '.');
           const numAmount = parseFloat(amount);
           
-          // Validate: between 0.01 and 999999, not a year
           if (numAmount >= 0.01 && numAmount <= 999999 && numAmount < 2000) {
             potentialPrices.push({
               amount: amount,
@@ -363,7 +376,6 @@ const SubscriptionTracker = () => {
       }
     }
     
-    // Sort by priority (highest first), then by value (highest first for same priority)
     potentialPrices.sort((a, b) => {
       if (b.priority !== a.priority) return b.priority - a.priority;
       return b.value - a.value;
@@ -371,42 +383,60 @@ const SubscriptionTracker = () => {
     
     console.log('Potential prices found:', potentialPrices);
     
-    // Pick the best one
     if (potentialPrices.length > 0) {
       cost = potentialPrices[0].amount;
     }
     
-    // Look for dates
+    // STRICT: Look for dates with better patterns
+    const potentialDates = [];
+    
     for (const line of lines) {
       const datePatterns = [
-        /(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[,\s]+(\d{4})/i,
-        /(?:expires?\s*(?:on|in)?\s*:?\s*)?(\d{1,2})[-/\s]+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[-/\s,]+(\d{4})/i,
-        /(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(\d{1,2})[,\s]+(\d{4})/i,
-        /(\d{1,2})[-/](\d{1,2})[-/](\d{4})/
+        // "expires on 21 Mar, 2026" or "Plan expires on 21 Mar, 2026"
+        { pattern: /(?:expires?|expiry|renewal|renews?|next|due).*?(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[,\s]+(\d{4})/i, priority: 10 },
+        // "21 Mar, 2026"
+        { pattern: /(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[,\s]+(\d{4})/i, priority: 8 },
+        // "Mar 21, 2026"
+        { pattern: /(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(\d{1,2})[,\s]+(\d{4})/i, priority: 8 },
+        // "21/03/2026" or "21-03-2026"
+        { pattern: /(\d{1,2})[-/](\d{1,2})[-/](\d{4})/i, priority: 6 }
       ];
       
-      for (const pattern of datePatterns) {
+      for (const { pattern, priority } of datePatterns) {
         const match = line.match(pattern);
         if (match) {
           try {
-            const dateStr = match[0].replace(/expires?\s*(?:on|in)?\s*:?\s*/i, '');
+            const dateStr = match[0].replace(/(?:expires?|expiry|renewal|renews?|next|due).*?(?:on|in)?\s*:?\s*/i, '');
             const parsed = new Date(dateStr);
             if (!isNaN(parsed.getTime())) {
               const year = parsed.getFullYear();
-              const month = String(parsed.getMonth() + 1).padStart(2, '0');
-              const day = String(parsed.getDate()).padStart(2, '0');
-              date = `${year}-${month}-${day}`;
-              break;
+              // Only accept future dates or dates within reasonable range
+              if (year >= 2024 && year <= 2030) {
+                const month = String(parsed.getMonth() + 1).padStart(2, '0');
+                const day = String(parsed.getDate()).padStart(2, '0');
+                potentialDates.push({
+                  date: `${year}-${month}-${day}`,
+                  priority: priority,
+                  line: line
+                });
+              }
             }
           } catch (e) {
             console.log('Date parse error:', e);
           }
         }
       }
-      if (date) break;
     }
     
-    console.log('Parsed results:', { name, cost, date });
+    // Sort by priority and pick best date
+    potentialDates.sort((a, b) => b.priority - a.priority);
+    console.log('Potential dates found:', potentialDates);
+    
+    if (potentialDates.length > 0) {
+      date = potentialDates[0].date;
+    }
+    
+    console.log('Final parsed results:', { name, cost, date });
     return { name, cost, date };
   };
 
@@ -417,6 +447,15 @@ const SubscriptionTracker = () => {
       sub.name.toLowerCase() === name.toLowerCase() && sub.id !== editingId
     );
     setNameWarning(duplicate ? `⚠️ "${duplicate.name}" exists${duplicate.email ? ` (${duplicate.email})` : ''}` : '');
+  };
+
+  const removeImage = () => {
+    setFormData({...formData, image: ''});
+  };
+
+  const zoomImage = (imageUrl) => {
+    setZoomedImage(imageUrl);
+    setShowImageZoom(true);
   };
 
   const editSubscription = (sub) => {
@@ -621,6 +660,31 @@ const SubscriptionTracker = () => {
               </h2>
               <button onClick={resetForm} className="text-gray-500"><X size={20} /></button>
             </div>
+
+            {/* Image Preview with Remove Option */}
+            {formData.image && (
+              <div className="mb-4 relative">
+                <div className="relative inline-block">
+                  <img 
+                    src={formData.image} 
+                    alt="Preview" 
+                    className="w-full max-w-xs rounded-lg border-2 border-purple-200 cursor-pointer hover:opacity-90 transition"
+                    onClick={() => zoomImage(formData.image)}
+                  />
+                  <button
+                    onClick={removeImage}
+                    className="absolute top-2 right-2 bg-red-500 text-white p-2 rounded-full hover:bg-red-600 shadow-lg"
+                    title="Remove image"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  Click image to zoom • Click X to remove and capture/upload new
+                </p>
+              </div>
+            )}
+            
             <div className="space-y-3">
               <div>
                 <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
@@ -707,7 +771,12 @@ const SubscriptionTracker = () => {
                     <div key={sub.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
                       <div className="flex items-center gap-2 flex-1 min-w-0 mr-2">
                         {sub.image && (
-                          <img src={sub.image} alt={sub.name} className="w-10 h-10 rounded object-cover flex-shrink-0" />
+                          <img 
+                            src={sub.image} 
+                            alt={sub.name} 
+                            className="w-10 h-10 rounded object-cover flex-shrink-0 cursor-pointer hover:opacity-80 transition" 
+                            onClick={() => zoomImage(sub.image)}
+                          />
                         )}
                         <div className="flex-1 min-w-0">
                           <div className="font-semibold text-gray-800 text-sm truncate">{sub.name}</div>
@@ -731,7 +800,12 @@ const SubscriptionTracker = () => {
                   <div key={sub.id} className="flex justify-between items-start p-3 border rounded-lg hover:shadow-md transition">
                     <div className="flex items-start gap-2 flex-1 min-w-0 mr-2">
                       {sub.image && (
-                        <img src={sub.image} alt={sub.name} className="w-12 h-12 sm:w-14 sm:h-14 rounded object-cover flex-shrink-0" />
+                        <img 
+                          src={sub.image} 
+                          alt={sub.name} 
+                          className="w-12 h-12 sm:w-14 sm:h-14 rounded object-cover flex-shrink-0 cursor-pointer hover:opacity-80 transition" 
+                          onClick={() => zoomImage(sub.image)}
+                        />
                       )}
                       <div className="flex-1 min-w-0">
                         <div className="flex flex-wrap items-center gap-1 mb-1">
@@ -757,6 +831,27 @@ const SubscriptionTracker = () => {
                   </div>
                 ))}
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Image Zoom Modal */}
+        {showImageZoom && (
+          <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center p-4 z-50" onClick={() => setShowImageZoom(false)}>
+            <div className="relative max-w-4xl max-h-screen">
+              <button
+                onClick={() => setShowImageZoom(false)}
+                className="absolute top-4 right-4 bg-white text-gray-800 p-2 rounded-full hover:bg-gray-200 shadow-lg z-10"
+              >
+                <X size={24} />
+              </button>
+              <img 
+                src={zoomedImage} 
+                alt="Zoomed" 
+                className="max-w-full max-h-screen object-contain rounded-lg"
+                onClick={(e) => e.stopPropagation()}
+              />
+              <p className="text-white text-center mt-4 text-sm">Click outside to close</p>
             </div>
           </div>
         )}
