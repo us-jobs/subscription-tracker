@@ -11,7 +11,7 @@ const SubscriptionTracker = () => {
   const [tempName, setTempName] = useState('');
   const [formData, setFormData] = useState({
     name: '', cost: '', billingCycle: 'monthly', nextBillingDate: '',
-    category: 'streaming', isTrial: false, trialEndDate: '', email: ''
+    category: 'streaming', isTrial: false, trialEndDate: '', email: '', image: ''
   });
   const [errors, setErrors] = useState({});
   const [nameWarning, setNameWarning] = useState('');
@@ -92,7 +92,7 @@ const SubscriptionTracker = () => {
 
   const resetForm = () => {
     setFormData({ name: '', cost: '', billingCycle: 'monthly', nextBillingDate: '',
-      category: 'streaming', isTrial: false, trialEndDate: '', email: '' });
+      category: 'streaming', isTrial: false, trialEndDate: '', email: '', image: '' });
     setShowAddForm(false);
     setEditingId(null);
     setNameWarning('');
@@ -223,6 +223,13 @@ const SubscriptionTracker = () => {
     stopCamera();
     
     try {
+      // Convert image to base64 for storage
+      const reader = new FileReader();
+      const imageBase64 = await new Promise((resolve) => {
+        reader.onloadend = () => resolve(reader.result);
+        reader.readAsDataURL(imageBlob);
+      });
+      
       // Preprocess image for better OCR
       const processedBlob = await preprocessImage(imageBlob);
       const imageUrl = URL.createObjectURL(processedBlob);
@@ -245,29 +252,22 @@ const SubscriptionTracker = () => {
       const found = [];
       const missing = [];
       
-      if (parsed.name) {
-        found.push('Name');
-      } else {
-        missing.push('Name');
-      }
+      if (parsed.name) found.push('Name');
+      else missing.push('Name');
       
-      if (parsed.cost) {
-        found.push('Cost');
-      } else {
-        missing.push('Cost');
-      }
+      if (parsed.cost) found.push('Cost');
+      else missing.push('Cost');
       
-      if (parsed.date) {
-        found.push('Date');
-      } else {
-        missing.push('Date');
-      }
+      if (parsed.date) found.push('Date');
+      else missing.push('Date');
       
+      // Set form data with parsed info AND the image
       setFormData(prev => ({
         ...prev,
         name: parsed.name || prev.name,
         cost: parsed.cost || prev.cost,
-        nextBillingDate: parsed.date || prev.nextBillingDate
+        nextBillingDate: parsed.date || prev.nextBillingDate,
+        image: imageBase64  // Store the image
       }));
       
       setShowAddForm(true);
@@ -275,17 +275,17 @@ const SubscriptionTracker = () => {
       URL.revokeObjectURL(imageUrl);
       
       if (found.length === 0) {
-        alert('❌ Could not extract information\n\nThe image might have:\n• Dark background\n• Stylized text\n• Low contrast\n\nTip: Try taking a photo of:\n• Email receipt (white background)\n• Paper bill\n• Screenshot with good contrast\n\nPlease enter the details manually below.');
+        alert('❌ Could not extract information\n\nImage saved. Please enter details manually below.');
       } else if (missing.length > 0) {
-        alert(`✅ Found: ${found.join(', ')}\n\n⚠️ Missing: ${missing.join(', ')}\n\nPlease fill in the missing fields below.`);
+        alert(`✅ Found: ${found.join(', ')}\n⚠️ Missing: ${missing.join(', ')}\n\nImage saved. Fill missing fields below.`);
       } else {
-        alert('✅ All details extracted!\n\nPlease verify the information below and save.');
+        alert('✅ All details extracted!\n\nImage saved. Verify and save.');
       }
       
     } catch (error) {
       console.error('OCR Error:', error);
       setShowAddForm(true);
-      alert('❌ Processing failed\n\nPlease enter details manually below.\n\nError: ' + (error.message || 'Unknown error'));
+      alert('❌ Processing failed\n\nPlease enter details manually.');
     } finally {
       setIsProcessing(false);
     }
@@ -316,7 +316,6 @@ const SubscriptionTracker = () => {
         }
       }
       
-      // Pattern: "X Month Plan", "X Year Plan"
       if (!name && /\d+\s*(month|year|day)\s*(plan|subscription|membership)/i.test(line)) {
         name = line;
       }
@@ -324,34 +323,57 @@ const SubscriptionTracker = () => {
       if (name) break;
     }
     
-    // Look for price - IMPROVED to avoid matching single digits from dates
+    // IMPROVED: Look for ALL potential prices, then pick the most likely one
+    const potentialPrices = [];
+    
     for (const line of lines) {
-      // Skip lines that are just dates or have year patterns
+      // Skip pure date lines
       if (/^\d{1,2}[-/]\d{1,2}[-/]\d{2,4}$/.test(line.trim())) continue;
-      if (/20\d{2}/.test(line) && !/\$|USD|INR|Rs|₹/.test(line)) continue;
       
       const pricePatterns = [
-        // Must have currency indicator or be followed by currency
-        /(?:USD|INR|Rs\.?|₹)\s*(\d{2,6}(?:[.,]\d{2})?)/i,
-        /\$\s*(\d{2,6}(?:[.,]\d{2})?)/,
-        /(\d{2,6}(?:[.,]\d{2})?)\s*(?:USD|INR|Rs|rupees|dollars)/i,
-        // Standalone numbers only if they're 2+ digits and reasonable price range
-        /\b(\d{2,5})\b(?!\s*(?:day|month|year|mar|jan|feb|apr|may|jun|jul|aug|sep|oct|nov|dec))/i
+        // High priority: Has clear currency indicator (expanded to all major currencies)
+        { pattern: /(?:USD|INR|EUR|GBP|JPY|CNY|AUD|CAD|CHF|SGD|NZD|HKD|KRW|MXN|BRL|ZAR|RUB|SEK|NOK|DKK|PLN|TRY|AED|SAR|MYR|THB|IDR|PHP|VND|Rs\.?|₹|£|€|¥|₩|R\$|Fr|kr|zł|₺|RM|฿|Rp|₱|₫)\s*(\d{1,6}(?:[.,]\d{1,3})?)/i, priority: 10 },
+        { pattern: /(\d{1,6}(?:[.,]\d{1,3})?)\s*(?:USD|INR|EUR|GBP|JPY|CNY|AUD|CAD|CHF|SGD|NZD|HKD|KRW|MXN|BRL|ZAR|RUB|SEK|NOK|DKK|PLN|TRY|AED|SAR|MYR|THB|IDR|PHP|VND|dollars?|rupees?|euros?|pounds?|yen|yuan|francs?|kronor?|kroner?|złoty|lira|ringgit|baht|rupiah|pesos?|dong)/i, priority: 10 },
+        // Currency symbols at start or end
+        { pattern: /[\$£€¥₹₩₪₱₡₵₦₨₴₸]\s*(\d{1,6}(?:[.,]\d{1,3})?)/i, priority: 10 },
+        { pattern: /(\d{1,6}(?:[.,]\d{1,3})?)\s*[\$£€¥₹₩₪₱₡₵₦₨₴₸]/i, priority: 10 },
+        // Medium priority: Near money-related words
+        { pattern: /(?:price|cost|amount|total|pay|charge|fee|bill|payment)[:=\s]*(\d{2,6}(?:[.,]\d{1,3})?)/i, priority: 8 },
+        { pattern: /(\d{2,6}(?:[.,]\d{1,3})?)\s*(?:only|off|discount|per|each)/i, priority: 7 },
+        // Lower priority: Standalone numbers (but reasonable price range)
+        { pattern: /\b(\d{2,4})\b(?!\s*(?:day|month|year|mar|jan|feb|apr|may|jun|jul|aug|sep|oct|nov|dec|days|months|years))/i, priority: 5 }
       ];
       
-      for (const pattern of pricePatterns) {
+      for (const { pattern, priority } of pricePatterns) {
         const match = line.match(pattern);
         if (match) {
           let amount = match[1].replace(',', '.');
           const numAmount = parseFloat(amount);
-          // Must be between 1 and 999999, and not look like a year
-          if (numAmount >= 1 && numAmount <= 999999 && numAmount < 2000) {
-            cost = amount;
-            break;
+          
+          // Validate: between 0.01 and 999999, not a year
+          if (numAmount >= 0.01 && numAmount <= 999999 && numAmount < 2000) {
+            potentialPrices.push({
+              amount: amount,
+              value: numAmount,
+              priority: priority,
+              line: line
+            });
           }
         }
       }
-      if (cost) break;
+    }
+    
+    // Sort by priority (highest first), then by value (highest first for same priority)
+    potentialPrices.sort((a, b) => {
+      if (b.priority !== a.priority) return b.priority - a.priority;
+      return b.value - a.value;
+    });
+    
+    console.log('Potential prices found:', potentialPrices);
+    
+    // Pick the best one
+    if (potentialPrices.length > 0) {
+      cost = potentialPrices[0].amount;
     }
     
     // Look for dates
@@ -675,7 +697,7 @@ const SubscriptionTracker = () => {
           </div>
         )}
 
-        {subscriptions.length > 0 && !showAddForm && !showCamera && (
+                    {subscriptions.length > 0 && !showAddForm && !showCamera && (
           <div className="space-y-3">
             {upcoming.length > 0 && (
               <div className="bg-white rounded-xl shadow-lg p-4">
@@ -683,9 +705,14 @@ const SubscriptionTracker = () => {
                 <div className="space-y-2">
                   {upcoming.map(sub => (
                     <div key={sub.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                      <div className="flex-1 min-w-0 mr-2">
-                        <div className="font-semibold text-gray-800 text-sm truncate">{sub.name}</div>
-                        <div className="text-xs text-gray-600">{sub.daysUntil === 0 ? 'Today' : `${sub.daysUntil}d`}</div>
+                      <div className="flex items-center gap-2 flex-1 min-w-0 mr-2">
+                        {sub.image && (
+                          <img src={sub.image} alt={sub.name} className="w-10 h-10 rounded object-cover flex-shrink-0" />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold text-gray-800 text-sm truncate">{sub.name}</div>
+                          <div className="text-xs text-gray-600">{sub.daysUntil === 0 ? 'Today' : `${sub.daysUntil}d`}</div>
+                        </div>
                       </div>
                       <div className="text-right flex-shrink-0">
                         <div className="font-bold text-gray-800 text-sm">${sub.cost}</div>
@@ -702,15 +729,20 @@ const SubscriptionTracker = () => {
               <div className="space-y-2">
                 {subscriptions.map(sub => (
                   <div key={sub.id} className="flex justify-between items-start p-3 border rounded-lg hover:shadow-md transition">
-                    <div className="flex-1 min-w-0 mr-2">
-                      <div className="flex flex-wrap items-center gap-1 mb-1">
-                        <div className="font-semibold text-sm text-gray-800 truncate">{sub.name}</div>
-                        {sub.isTrial && <span className="px-1.5 py-0.5 bg-yellow-100 text-yellow-700 text-xs rounded-full flex-shrink-0">Trial</span>}
+                    <div className="flex items-start gap-2 flex-1 min-w-0 mr-2">
+                      {sub.image && (
+                        <img src={sub.image} alt={sub.name} className="w-12 h-12 sm:w-14 sm:h-14 rounded object-cover flex-shrink-0" />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-1 mb-1">
+                          <div className="font-semibold text-sm text-gray-800 truncate">{sub.name}</div>
+                          {sub.isTrial && <span className="px-1.5 py-0.5 bg-yellow-100 text-yellow-700 text-xs rounded-full flex-shrink-0">Trial</span>}
+                        </div>
+                        <div className="text-xs text-gray-600">
+                          ${sub.cost} / {sub.billingCycle} • {new Date(sub.nextBillingDate).toLocaleDateString()}
+                        </div>
+                        {sub.email && <div className="text-xs text-gray-500 truncate">📧 {sub.email}</div>}
                       </div>
-                      <div className="text-xs text-gray-600">
-                        ${sub.cost} / {sub.billingCycle} • {new Date(sub.nextBillingDate).toLocaleDateString()}
-                      </div>
-                      {sub.email && <div className="text-xs text-gray-500 truncate">📧 {sub.email}</div>}
                     </div>
                     <div className="flex gap-1 flex-shrink-0">
                       <button onClick={() => editSubscription(sub)}
