@@ -28,7 +28,8 @@ const SubscriptionTracker = () => {
   const streamRef = useRef(null);
   const fileInputRef = useRef(null);
   const [showClearDataWarning, setShowClearDataWarning] = useState(false);
-
+  const [popupMessage, setPopupMessage] = useState(''); // Added for custom popup
+  const [showNotificationPrompt, setShowNotificationPrompt] = useState(false); // Added for notification prompt
 
   const categories = ['streaming', 'software', 'fitness', 'food', 'gaming', 'music', 'other'];
 
@@ -113,6 +114,7 @@ const SubscriptionTracker = () => {
 
   const handleSubmit = () => {
     if (!validateForm()) return;
+    const isFirst = subscriptions.length === 0;
     if (editingId) {
       setSubscriptions(subscriptions.map(s => 
         s.id === editingId ? { ...formData, id: editingId } : s
@@ -121,6 +123,9 @@ const SubscriptionTracker = () => {
       setSubscriptions([...subscriptions, { ...formData, id: Date.now(), status: 'active' }]);
     }
     resetForm();
+    if (isFirst && !notificationsEnabled) {
+      setShowNotificationPrompt(true);
+    }
   };
 
   const resetForm = () => {
@@ -164,7 +169,7 @@ const SubscriptionTracker = () => {
       }, 100);
     } catch (err) {
       console.error('Camera error:', err);
-      alert('Camera access denied. Please allow camera permission in your browser settings.');
+      showPopup('Camera access denied. Please allow camera permission in your browser settings.'); // Replaced alert
       setAddMethod('manual');
     }
   };
@@ -176,7 +181,7 @@ const SubscriptionTracker = () => {
     
     // Make sure video is playing
     if (video.readyState !== video.HAVE_ENOUGH_DATA) {
-      alert('Camera not ready. Please wait a moment and try again.');
+      showPopup('Camera not ready. Please wait a moment and try again.'); // Replaced alert
       return;
     }
     
@@ -190,7 +195,7 @@ const SubscriptionTracker = () => {
       if (blob) {
         processImage(blob);
       } else {
-        alert('Failed to capture image. Please try again.');
+        showPopup('Failed to capture image. Please try again.'); // Replaced alert
       }
     }, 'image/jpeg', 0.95);
   };
@@ -308,17 +313,17 @@ const SubscriptionTracker = () => {
       URL.revokeObjectURL(imageUrl);
       
       if (found.length === 0) {
-        alert('❌ Could not extract information\n\nImage saved. Please enter details manually below.');
+        showPopup('❌ Could not extract information\n\nImage saved. Please enter details manually below.'); // Replaced alert
       } else if (missing.length > 0) {
-        alert(`✅ Found: ${found.join(', ')}\n⚠️ Missing: ${missing.join(', ')}\n\nImage saved. Fill missing fields below.`);
+        showPopup(`✅ Found: ${found.join(', ')}\n⚠️ Missing: ${missing.join(', ')}\n\nImage saved. Fill missing fields below.`); // Replaced alert
       } else {
-        alert('✅ All details extracted!\n\nImage saved. Verify and save.');
+        showPopup('✅ All details extracted!\n\nImage saved. Verify and save.'); // Replaced alert
       }
       
     } catch (error) {
       console.error('OCR Error:', error);
       setShowAddForm(true);
-      alert('❌ Processing failed\n\nPlease enter details manually.');
+      showPopup('❌ Processing failed\n\nPlease enter details manually.'); // Replaced alert
     } finally {
       setIsProcessing(false);
     }
@@ -523,7 +528,7 @@ const SubscriptionTracker = () => {
     setUserName('');
     setReminderDays([1, 3]);
     setShowClearDataWarning(false);
-    alert('✅ All data cleared successfully!');
+    showPopup('✅ All data cleared successfully!'); // Replaced alert
     window.location.reload();
   };
 
@@ -563,6 +568,10 @@ const SubscriptionTracker = () => {
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   };
 
+  const showPopup = (message) => {
+    setPopupMessage(message);
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 p-2 sm:p-4">
       {showNamePrompt && (
@@ -589,9 +598,43 @@ const SubscriptionTracker = () => {
           </div>
         </div>
       )}
-
+      {/* Notification Prompt Modal */}
+      {showNotificationPrompt && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                <span className="text-2xl">🔔</span>
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Enable Notifications?</h2>
+                <p className="text-sm text-gray-600">Get reminders before subscription charges</p>
+              </div>
+            </div>
+            <p className="text-gray-600 mb-4">
+              We'll notify you 1-3 days before your subscriptions renew so you never miss a payment or forget to cancel a trial.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setShowNotificationPrompt(false); requestNotifications(); }}
+                className="flex-1 px-4 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium"
+              >
+                Enable Notifications
+              </button>
+              <button
+                onClick={() => setShowNotificationPrompt(false)}
+                className="flex-1 px-4 py-3 border-2 border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
+              >
+                Skip
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="max-w-6xl mx-auto">
         {/* SEO Hero Section */}
+        <div className="font-bold mb-3 mt-3 leading-tight"><img src="./logo.png" alt="SubTrack Logo" className="w-20 h-20 inline mr-2" /> </div>
+
         <div className="bg-gradient-to-br from-indigo-600 via-indigo-700 to-indigo-800 rounded-2xl shadow-xl p-6 sm:p-8 mb-6 text-white">
           <h1 className="text-2xl sm:text-4xl font-bold mb-3 leading-tight">SubTrack - Never Miss a Subscription Payment</h1>
           <p className="text-base sm:text-xl text-indigo-100 mb-4 leading-relaxed hidden sm:block">
@@ -614,7 +657,7 @@ const SubscriptionTracker = () => {
         </div>
 
         <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-4 sm:p-6 mb-4 sm:mb-6">
-          <div className="flex items-center justify-between mb-4">
+          <div className={"flex items-center justify-between" + (subscriptions.length > 0 ? " mb-4" : "")}>
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-full flex items-center justify-center text-white font-bold text-sm sm:text-base shadow-md">
                 {userName ? getInitials(userName) : <User size={20} />}
@@ -1221,6 +1264,29 @@ const SubscriptionTracker = () => {
                   Clear All
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Custom Popup Modal */}
+        {popupMessage && (
+          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                  <span className="text-2xl">ℹ️</span>
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">Notice</h2>
+                </div>
+              </div>
+              <p className="text-gray-600 mb-4 whitespace-pre-line">{popupMessage}</p>
+              <button
+                onClick={() => setPopupMessage('')}
+                className="w-full bg-indigo-600 text-white px-4 py-3 rounded-lg hover:bg-indigo-700 font-medium"
+              >
+                OK
+              </button>
             </div>
           </div>
         )}
