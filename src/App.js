@@ -1045,7 +1045,7 @@ const SubscriptionTracker = () => {
         {/* SEO Content Section - Always show */}
         {!showAddForm && !showCamera && (
           <div className="space-y-6">
-            <div className="bg-white rounded-xl shadow-lg p-6">
+            <div className="bg-white rounded-xl shadow-lg p-6 mt-6">
               <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-4">
                 Why Use SubTrack?
               </h2>
