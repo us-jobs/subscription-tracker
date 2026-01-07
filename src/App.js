@@ -27,6 +27,8 @@ const SubscriptionTracker = () => {
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
   const fileInputRef = useRef(null);
+  const [showClearDataWarning, setShowClearDataWarning] = useState(false);
+
 
   const categories = ['streaming', 'software', 'fitness', 'food', 'gaming', 'music', 'other'];
 
@@ -499,6 +501,32 @@ const SubscriptionTracker = () => {
     setShowImageZoom(true);
   };
 
+  const exportData = () => {
+    const data = {
+      userName,
+      subscriptions,
+      reminderDays,
+      exportDate: new Date().toISOString()
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `subtrack-backup-${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const clearAllData = () => {
+    localStorage.clear();
+    setSubscriptions([]);
+    setUserName('');
+    setReminderDays([1, 3]);
+    setShowClearDataWarning(false);
+    alert('✅ All data cleared successfully!');
+    window.location.reload();
+  };
+
   const editSubscription = (sub) => {
     setFormData(sub);
     setEditingId(sub.id);
@@ -608,6 +636,15 @@ const SubscriptionTracker = () => {
                 title="Reminder Settings"
               >
                 ⚙️
+              </button>
+            )}
+            {subscriptions.length > 0 && (
+              <button
+                onClick={() => setShowClearDataWarning(true)}
+                className="p-2 sm:p-3 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition text-xs"
+                title="Clear All Data"
+              >
+                🗑️
               </button>
             )}
           </div>
@@ -1005,8 +1042,8 @@ const SubscriptionTracker = () => {
           </div>
         )}
 
-        {/* SEO Content Section */}
-        {subscriptions.length === 0 && !showAddForm && !showCamera && (
+        {/* SEO Content Section - Always show */}
+        {!showAddForm && !showCamera && (
           <div className="space-y-6">
             <div className="bg-white rounded-xl shadow-lg p-6">
               <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-4">
@@ -1124,6 +1161,65 @@ const SubscriptionTracker = () => {
                   <span className="text-lg">✓</span>
                   <span className="text-indigo-50">Works on mobile, tablet, and desktop</span>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Clear Data Warning Modal */}
+        {showClearDataWarning && (
+          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                  <span className="text-2xl">⚠️</span>
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">Clear All Data?</h2>
+                  <p className="text-sm text-gray-600">This action cannot be undone</p>
+                </div>
+              </div>
+              
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                <p className="text-sm text-gray-700 mb-2">
+                  <strong>This will delete:</strong>
+                </p>
+                <ul className="text-sm text-gray-600 space-y-1 ml-4">
+                  <li>• All {subscriptions.length} subscription{subscriptions.length !== 1 ? 's' : ''}</li>
+                  <li>• Your profile ({userName})</li>
+                  <li>• Reminder settings</li>
+                  <li>• All captured images</li>
+                </ul>
+              </div>
+
+              <div className="mb-4">
+                <p className="text-sm font-semibold text-gray-900 mb-2">
+                  💾 Download a backup first (recommended)
+                </p>
+                <button
+                  onClick={exportData}
+                  className="w-full bg-indigo-600 text-white px-4 py-3 rounded-lg hover:bg-indigo-700 font-medium flex items-center justify-center gap-2 mb-2"
+                >
+                  📥 Download Backup
+                </button>
+                <p className="text-xs text-gray-500 text-center">
+                  Saves all your data as JSON file
+                </p>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowClearDataWarning(false)}
+                  className="flex-1 px-4 py-3 border-2 border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={clearAllData}
+                  className="flex-1 px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium"
+                >
+                  Clear All
+                </button>
               </div>
             </div>
           </div>
