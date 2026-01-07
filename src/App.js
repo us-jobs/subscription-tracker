@@ -694,7 +694,7 @@ const SubscriptionTracker = () => {
 
           {/* Reminder Settings */}
           {showReminderSettings && notificationsEnabled && (
-            <div className="mt-4 p-4 bg-indigo-50 border border-indigo-200 rounded-lg">
+            <div className={"mt-4 p-4 bg-indigo-50 border border-indigo-200 rounded-lg" + (subscriptions.length > 0 ? " mb-4" : "")}>
               <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
                 🔔 Reminder Settings
               </h3>
