@@ -9,8 +9,9 @@ const SubscriptionTracker = () => {
   const [userName, setUserName] = useState('');
   const [showNamePrompt, setShowNamePrompt] = useState(false);
   const [tempName, setTempName] = useState('');
+  const [showEditNamePrompt, setShowEditNamePrompt] = useState(false); // Added for editing name
   const [formData, setFormData] = useState({
-    name: '', cost: '', billingCycle: 'monthly', nextBillingDate: '',
+    name: '', cost: '', currency: 'USD', billingCycle: 'monthly', nextBillingDate: '',
     category: 'streaming', isTrial: false, trialEndDate: '', email: '', image: ''
   });
   const [errors, setErrors] = useState({});
@@ -33,9 +34,54 @@ const SubscriptionTracker = () => {
 
   const categories = ['streaming', 'software', 'fitness', 'food', 'gaming', 'music', 'other'];
 
+  const currencies = [
+    { value: 'USD', label: 'USD ($)', symbol: '$' },
+    { value: 'EUR', label: 'EUR (€)', symbol: '€' },
+    { value: 'GBP', label: 'GBP (£)', symbol: '£' },
+    { value: 'INR', label: 'INR (₹)', symbol: '₹' },
+    { value: 'JPY', label: 'JPY (¥)', symbol: '¥' },
+    { value: 'CNY', label: 'CNY (¥)', symbol: '¥' },
+    { value: 'AUD', label: 'AUD ($)', symbol: '$' },
+    { value: 'CAD', label: 'CAD ($)', symbol: '$' },
+    { value: 'CHF', label: 'CHF (Fr)', symbol: 'Fr' },
+    { value: 'SGD', label: 'SGD ($)', symbol: '$' },
+    { value: 'NZD', label: 'NZD ($)', symbol: '$' },
+    { value: 'HKD', label: 'HKD ($)', symbol: '$' },
+    { value: 'KRW', label: 'KRW (₩)', symbol: '₩' },
+    { value: 'MXN', label: 'MXN ($)', symbol: '$' },
+    { value: 'BRL', label: 'BRL (R$)', symbol: 'R$' },
+    { value: 'ZAR', label: 'ZAR (R)', symbol: 'R' },
+    { value: 'RUB', label: 'RUB (₽)', symbol: '₽' },
+    { value: 'SEK', label: 'SEK (kr)', symbol: 'kr' },
+    { value: 'NOK', label: 'NOK (kr)', symbol: 'kr' },
+    { value: 'DKK', label: 'DKK (kr)', symbol: 'kr' },
+    { value: 'PLN', label: 'PLN (zł)', symbol: 'zł' },
+    { value: 'TRY', label: 'TRY (₺)', symbol: '₺' },
+    { value: 'AED', label: 'AED (د.إ)', symbol: 'د.إ' },
+    { value: 'SAR', label: 'SAR (﷼)', symbol: '﷼' },
+    { value: 'MYR', label: 'MYR (RM)', symbol: 'RM' },
+    { value: 'THB', label: 'THB (฿)', symbol: '฿' },
+    { value: 'IDR', label: 'IDR (Rp)', symbol: 'Rp' },
+    { value: 'PHP', label: 'PHP (₱)', symbol: '₱' },
+    { value: 'VND', label: 'VND (₫)', symbol: '₫' }
+  ];
+
+  const currencyMap = {
+    'USD': 'USD', 'INR': 'INR', 'EUR': 'EUR', 'GBP': 'GBP', 'JPY': 'JPY', 'CNY': 'CNY', 'AUD': 'AUD', 'CAD': 'CAD', 'CHF': 'CHF', 'SGD': 'SGD', 'NZD': 'NZD', 'HKD': 'HKD', 'KRW': 'KRW', 'MXN': 'MXN', 'BRL': 'BRL', 'ZAR': 'ZAR', 'RUB': 'RUB', 'SEK': 'SEK', 'NOK': 'NOK', 'DKK': 'DKK', 'PLN': 'PLN', 'TRY': 'TRY', 'AED': 'AED', 'SAR': 'SAR', 'MYR': 'MYR', 'THB': 'THB', 'IDR': 'IDR', 'PHP': 'PHP', 'VND': 'VND',
+    'RS.': 'INR', '₹': 'INR', '£': 'GBP', '€': 'EUR', '¥': 'JPY', '₩': 'KRW', 'R$': 'BRL', 'FR': 'CHF', 'KR': 'SEK', 'ZŁ': 'PLN', '₺': 'TRY', 'RM': 'MYR', '฿': 'THB', 'RP': 'IDR', '₱': 'PHP', '₫': 'VND'
+  };
+
+  const getCurrencySymbol = (currency) => {
+    const curr = currencies.find(c => c.value === currency);
+    return curr ? curr.symbol : currency;
+  };
+
   useEffect(() => {
     const saved = localStorage.getItem('subscriptions');
-    if (saved) setSubscriptions(JSON.parse(saved));
+    if (saved) {
+      const subs = JSON.parse(saved);
+      setSubscriptions(subs.map(sub => ({ ...sub, currency: sub.currency || 'USD' })));
+    }
     
     const savedName = localStorage.getItem('userName');
     if (savedName) {
@@ -67,6 +113,14 @@ const SubscriptionTracker = () => {
       setUserName(tempName.trim());
       localStorage.setItem('userName', tempName.trim());
       setShowNamePrompt(false);
+    }
+  };
+
+  const saveEditName = () => {
+    if (tempName.trim()) {
+      setUserName(tempName.trim());
+      localStorage.setItem('userName', tempName.trim());
+      setShowEditNamePrompt(false);
     }
   };
 
@@ -108,6 +162,9 @@ const SubscriptionTracker = () => {
     }
     if (!formData.nextBillingDate) newErrors.nextBillingDate = 'Date required';
     if (formData.isTrial && !formData.trialEndDate) newErrors.trialEndDate = 'Trial date required';
+    if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      newErrors.email = 'Invalid email format';
+    }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -129,7 +186,7 @@ const SubscriptionTracker = () => {
   };
 
   const resetForm = () => {
-    setFormData({ name: '', cost: '', billingCycle: 'monthly', nextBillingDate: '',
+    setFormData({ name: '', cost: '', currency: 'USD', billingCycle: 'monthly', nextBillingDate: '',
       category: 'streaming', isTrial: false, trialEndDate: '', email: '', image: '' });
     setShowAddForm(false);
     setEditingId(null);
@@ -304,6 +361,7 @@ const SubscriptionTracker = () => {
         ...prev,
         name: parsed.name || prev.name,
         cost: parsed.cost || prev.cost,
+        currency: parsed.currency || prev.currency,
         nextBillingDate: parsed.date || prev.nextBillingDate,
         image: imageBase64  // Store the image
       }));
@@ -331,7 +389,7 @@ const SubscriptionTracker = () => {
 
   const parseReceiptText = (text) => {
     const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-    let name = '', cost = '', date = '';
+    let name = '', cost = '', date = '', currency = 'USD';
     
     console.log('All extracted lines:', lines);
     
@@ -386,36 +444,36 @@ const SubscriptionTracker = () => {
       if (/^\d{1,2}[-/]\d{1,2}[-/]\d{2,4}$/.test(line.trim())) continue;
       
       const pricePatterns = [
-        { pattern: /(?:USD|INR|EUR|GBP|JPY|CNY|AUD|CAD|CHF|SGD|NZD|HKD|KRW|MXN|BRL|ZAR|RUB|SEK|NOK|DKK|PLN|TRY|AED|SAR|MYR|THB|IDR|PHP|VND|Rs\.?|₹|£|€|¥|₩|R\$|Fr|kr|zł|₺|RM|฿|Rp|₱|₫)\s*(\d{1,6}(?:[.,]\d{1,3})?)/i, priority: 10 },
-        { pattern: /(\d{1,6}(?:[.,]\d{1,3})?)\s*(?:USD|INR|EUR|GBP|JPY|CNY|AUD|CAD|CHF|SGD|NZD|HKD|KRW|MXN|BRL|ZAR|RUB|SEK|NOK|DKK|PLN|TRY|AED|SAR|MYR|THB|IDR|PHP|VND|dollars?|rupees?|euros?|pounds?|yen|yuan|francs?|kronor?|kroner?|złoty|lira|ringgit|baht|rupiah|pesos?|dong)/i, priority: 10 },
-        { pattern: /[\$£€¥₹₩₪₱₡₵₦₨₴₸]\s*(\d{1,6}(?:[.,]\d{1,3})?)/i, priority: 10 },
-        { pattern: /(\d{1,6}(?:[.,]\d{1,3})?)\s*[\$£€¥₹₩₪₱₡₵₦₨₴₸]/i, priority: 10 },
-        { pattern: /(?:price|cost|amount|total|pay|charge|fee|bill|payment)[:=\s]*(\d{2,6}(?:[.,]\d{1,3})?)/i, priority: 8 },
-        { pattern: /(\d{2,6}(?:[.,]\d{1,3})?)\s*(?:only|off|discount|per|each)/i, priority: 7 },
-        { pattern: /\b(\d{2,4})\b(?!\s*(?:day|month|year|mar|jan|feb|apr|may|jun|jul|aug|sep|oct|nov|dec|days|months|years))/i, priority: 5 }
+        { pattern: /((?:USD|INR|EUR|GBP|JPY|CNY|AUD|CAD|CHF|SGD|NZD|HKD|KRW|MXN|BRL|ZAR|RUB|SEK|NOK|DKK|PLN|TRY|AED|SAR|MYR|THB|IDR|PHP|VND|Rs\.?|₹|£|€|¥|₩|R\$|Fr|kr|zł|₺|RM|฿|Rp|₱|₫))\s*(\d{1,6}(?:[.,]\d{1,3})?)/i, priority: 10, hasCurrency: true },
+        { pattern: /(\d{1,6}(?:[.,]\d{1,3})?)\s*(?:USD|INR|EUR|GBP|JPY|CNY|AUD|CAD|CHF|SGD|NZD|HKD|KRW|MXN|BRL|ZAR|RUB|SEK|NOK|DKK|PLN|TRY|AED|SAR|MYR|THB|IDR|PHP|VND|dollars?|rupees?|euros?|pounds?|yen|yuan|francs?|kronor?|kroner?|złoty|lira|ringgit|baht|rupiah|pesos?|dong)/i, priority: 10, hasCurrency: true },
+        { pattern: /[\$£€¥₹₩₪₱₡₵₦₨₴₸]\s*(\d{1,6}(?:[.,]\d{1,3})?)/i, priority: 10, hasCurrency: true },
+        { pattern: /(\d{1,6}(?:[.,]\d{1,3})?)\s*[\$£€¥₹₩₪₱₡₵₦₨₴₸]/i, priority: 10, hasCurrency: true },
+        { pattern: /(?:price|cost|amount|total|pay|charge|fee|bill|payment)[:=\s]*(\d{2,6}(?:[.,]\d{1,3})?)/i, priority: 8, hasCurrency: false },
+        { pattern: /(\d{2,6}(?:[.,]\d{1,3})?)\s*(?:only|off|discount|per|each)/i, priority: 7, hasCurrency: false },
+        { pattern: /\b(\d{2,4})\b(?!\s*(?:day|month|year|mar|jan|feb|apr|may|jun|jul|aug|sep|oct|nov|dec|days|months|years))/i, priority: 5, hasCurrency: false }
       ];
       
-      for (const { pattern, priority } of pricePatterns) {
+      for (const { pattern, priority, hasCurrency } of pricePatterns) {
         const match = line.match(pattern);
         if (match) {
-          let amount = match[1].replace(',', '.');
+          let amount = match[hasCurrency ? 2 : 1].replace(',', '.');
+          let detectedCurrency = 'USD';
+          if (hasCurrency) {
+            const currencyPart = match[1].toUpperCase();
+            detectedCurrency = currencyMap[currencyPart] || 'USD';
+          }
           const numAmount = parseFloat(amount);
           
-          // STRICT: Must be reasonable price AND have some currency context
-          // Reject if it's just a standalone number without currency indicator
-          const hasCurrencyContext = /[\$£€¥₹₩₪₱₡₵₦₨₴₸]|USD|INR|EUR|GBP|price|cost|amount|pay|charge|fee|bill/i.test(line);
-          
+          // STRICT: Must be reasonable price
           if (numAmount >= 0.01 && numAmount <= 999999 && numAmount < 2000) {
-            // Only add if it has currency context OR it's high priority
-            if (hasCurrencyContext || priority >= 8) {
-              potentialPrices.push({
-                amount: amount,
-                value: numAmount,
-                priority: priority,
-                line: line,
-                hasCurrency: hasCurrencyContext
-              });
-            }
+            potentialPrices.push({
+              amount: amount,
+              value: numAmount,
+              priority: priority,
+              line: line,
+              hasCurrency: hasCurrency,
+              currency: detectedCurrency
+            });
           }
         }
       }
@@ -430,9 +488,10 @@ const SubscriptionTracker = () => {
     
     console.log('Potential prices found:', potentialPrices);
     
-    // Pick the best one ONLY if it has currency context
-    if (potentialPrices.length > 0 && potentialPrices[0].hasCurrency) {
+    // Pick the best one
+    if (potentialPrices.length > 0) {
       cost = potentialPrices[0].amount;
+      currency = potentialPrices[0].currency;
     }
     
     // STRICT: Look for dates with better patterns
@@ -484,8 +543,8 @@ const SubscriptionTracker = () => {
       date = potentialDates[0].date;
     }
     
-    console.log('Final parsed results:', { name, cost, date });
-    return { name, cost, date };
+    console.log('Final parsed results:', { name, cost, date, currency });
+    return { name, cost, date, currency };
   };
 
   const handleNameChange = (name) => {
@@ -572,6 +631,13 @@ const SubscriptionTracker = () => {
     setPopupMessage(message);
   };
 
+  const scrollToHowToUse = () => {
+    const element = document.getElementById('how-to-use');
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 p-2 sm:p-4">
       {showNamePrompt && (
@@ -595,6 +661,39 @@ const SubscriptionTracker = () => {
             >
               Get Started
             </button>
+          </div>
+        </div>
+      )}
+      {/* Edit Name Prompt Modal */}
+      {showEditNamePrompt && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md">
+            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4">Edit Name</h2>
+            <p className="text-gray-600 mb-4 text-sm sm:text-base">Update your name:</p>
+            <input
+              type="text"
+              value={tempName}
+              onChange={(e) => setTempName(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && saveEditName()}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent mb-4"
+              placeholder="Enter your name"
+              autoFocus
+            />
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowEditNamePrompt(false)}
+                className="flex-1 px-4 py-3 border-2 border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveEditName}
+                disabled={!tempName.trim()}
+                className="flex-1 bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 font-medium disabled:bg-gray-300 disabled:cursor-not-allowed transition"
+              >
+                Save
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -633,7 +732,17 @@ const SubscriptionTracker = () => {
       )}
       <div className="max-w-6xl mx-auto">
         {/* SEO Hero Section */}
-        <div className="font-bold mb-3 mt-3 leading-tight"><img src="./logo.png" alt="SubTrack Logo" className="w-20 h-20 inline mr-2" /> </div>
+        <div className="font-bold mb-3 mt-3 leading-tight">
+          <div className="flex items-center justify-between">
+            <img src="./logo.png" alt="SubTrack Logo" className="w-20 h-20" />
+            <button
+              onClick={scrollToHowToUse}
+              className="bg-white text-indigo-600 px-4 py-2 rounded-lg hover:bg-gray-100 font-medium transition"
+            >
+              How to Use
+            </button>
+          </div>
+        </div>
 
         <div className="bg-gradient-to-br from-indigo-600 via-indigo-700 to-indigo-800 rounded-2xl shadow-xl p-6 sm:p-8 mb-6 text-white">
           <h1 className="text-2xl sm:text-4xl font-bold mb-3 leading-tight">SubTrack - Never Miss a Subscription Payment</h1>
@@ -662,9 +771,18 @@ const SubscriptionTracker = () => {
               <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-full flex items-center justify-center text-white font-bold text-sm sm:text-base shadow-md">
                 {userName ? getInitials(userName) : <User size={20} />}
               </div>
-              <div>
-                <h1 className="text-lg sm:text-2xl font-bold text-gray-900">{userName || 'SubTrack'}</h1>
-                <p className="text-xs sm:text-sm text-gray-500">Manage subscriptions</p>
+              <div className="flex items-center gap-2">
+                <div>
+                  <h1 className="text-lg sm:text-2xl font-bold text-gray-900">{userName || 'SubTrack'}</h1>
+                  <p className="text-xs sm:text-sm text-gray-500">Manage subscriptions</p>
+                </div>
+                <button
+                  onClick={() => { setTempName(userName); setShowEditNamePrompt(true); }}
+                  className="text-gray-500 hover:text-gray-700 p-1"
+                  title="Edit Name"
+                >
+                  <Edit2 size={16} />
+                </button>
               </div>
             </div>
             <button onClick={requestNotifications}
@@ -882,12 +1000,13 @@ const SubscriptionTracker = () => {
               </div>
               <div>
                 <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Email <span className="text-gray-400 text-xs">(optional)</span></label>
-                <input type="email" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 text-sm" placeholder="john@example.com" />
+                <input type="email" value={formData.email} onChange={(e) => { setFormData({...formData, email: e.target.value}); if (errors.email) setErrors({...errors, email: ''}); }}
+                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 text-sm ${errors.email ? 'border-red-500' : ''}`} placeholder="john@example.com" />
+                {errors.email && <div className="mt-1 text-xs text-red-600">{errors.email}</div>}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Cost ($) <span className="text-red-500">*</span></label>
+                  <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Cost <span className="text-red-500">*</span></label>
                   <input type="number" step="0.01" value={formData.cost}
                     onChange={(e) => { setFormData({...formData, cost: e.target.value}); if (errors.cost) setErrors({...errors, cost: ''}); }}
                     className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 text-sm ${errors.cost ? 'border-red-500' : ''}`} placeholder="9.99" />
@@ -904,6 +1023,13 @@ const SubscriptionTracker = () => {
                     <option value="yearly">Yearly</option>
                   </select>
                 </div>
+              </div>
+              <div>
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Currency</label>
+                <select value={formData.currency} onChange={(e) => setFormData({...formData, currency: e.target.value})}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 text-sm">
+                  {currencies.map(curr => <option key={curr.value} value={curr.value}>{curr.label}</option>)}
+                </select>
               </div>
               <div>
                 <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Category</label>
@@ -1005,7 +1131,7 @@ const SubscriptionTracker = () => {
                         </div>
                       </div>
                       <div className="text-right flex-shrink-0">
-                        <div className="font-bold text-gray-800 text-sm">${sub.cost}</div>
+                        <div className="font-bold text-gray-800 text-sm">{getCurrencySymbol(sub.currency)}{sub.cost}</div>
                         <div className="text-xs text-gray-500">{sub.billingCycle.slice(0,3)}</div>
                       </div>
                     </div>
@@ -1034,7 +1160,7 @@ const SubscriptionTracker = () => {
                           {sub.isTrial && <span className="px-1.5 py-0.5 bg-yellow-100 text-yellow-700 text-xs rounded-full flex-shrink-0">Trial</span>}
                         </div>
                         <div className="text-xs text-gray-600">
-                          ${sub.cost} / {sub.billingCycle} • {new Date(sub.nextBillingDate).toLocaleDateString()}
+                          {getCurrencySymbol(sub.currency)}{sub.cost} / {sub.billingCycle} • {new Date(sub.nextBillingDate).toLocaleDateString()}
                         </div>
                         {sub.email && <div className="text-xs text-gray-500 truncate">📧 {sub.email}</div>}
                       </div>
@@ -1132,7 +1258,7 @@ const SubscriptionTracker = () => {
               </div>
             </div>
 
-            <div className="bg-white rounded-xl shadow-lg p-6">
+            <div id="how-to-use" className="bg-white rounded-xl shadow-lg p-6">
               <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-4">
                 How to Use SubTrack
               </h2>
