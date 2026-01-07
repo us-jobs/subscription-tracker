@@ -39,37 +39,12 @@ const SubscriptionTracker = () => {
     { value: 'EUR', label: 'EUR (€)', symbol: '€' },
     { value: 'GBP', label: 'GBP (£)', symbol: '£' },
     { value: 'INR', label: 'INR (₹)', symbol: '₹' },
+    { value: 'CAD', label: 'CAD ($)', symbol: '$' },
+    { value: 'AUD', label: 'AUD ($)', symbol: '$' },
     { value: 'JPY', label: 'JPY (¥)', symbol: '¥' },
     { value: 'CNY', label: 'CNY (¥)', symbol: '¥' },
-    { value: 'AUD', label: 'AUD ($)', symbol: '$' },
-    { value: 'CAD', label: 'CAD ($)', symbol: '$' },
-    { value: 'CHF', label: 'CHF (Fr)', symbol: 'Fr' },
-    { value: 'SGD', label: 'SGD ($)', symbol: '$' },
-    { value: 'NZD', label: 'NZD ($)', symbol: '$' },
-    { value: 'HKD', label: 'HKD ($)', symbol: '$' },
-    { value: 'KRW', label: 'KRW (₩)', symbol: '₩' },
-    { value: 'MXN', label: 'MXN ($)', symbol: '$' },
-    { value: 'BRL', label: 'BRL (R$)', symbol: 'R$' },
-    { value: 'ZAR', label: 'ZAR (R)', symbol: 'R' },
-    { value: 'RUB', label: 'RUB (₽)', symbol: '₽' },
-    { value: 'SEK', label: 'SEK (kr)', symbol: 'kr' },
-    { value: 'NOK', label: 'NOK (kr)', symbol: 'kr' },
-    { value: 'DKK', label: 'DKK (kr)', symbol: 'kr' },
-    { value: 'PLN', label: 'PLN (zł)', symbol: 'zł' },
-    { value: 'TRY', label: 'TRY (₺)', symbol: '₺' },
-    { value: 'AED', label: 'AED (د.إ)', symbol: 'د.إ' },
-    { value: 'SAR', label: 'SAR (﷼)', symbol: '﷼' },
-    { value: 'MYR', label: 'MYR (RM)', symbol: 'RM' },
-    { value: 'THB', label: 'THB (฿)', symbol: '฿' },
-    { value: 'IDR', label: 'IDR (Rp)', symbol: 'Rp' },
-    { value: 'PHP', label: 'PHP (₱)', symbol: '₱' },
-    { value: 'VND', label: 'VND (₫)', symbol: '₫' }
+    { value: 'KRW', label: 'KRW (₩)', symbol: '₩' }
   ];
-
-  const currencyMap = {
-    'USD': 'USD', 'INR': 'INR', 'EUR': 'EUR', 'GBP': 'GBP', 'JPY': 'JPY', 'CNY': 'CNY', 'AUD': 'AUD', 'CAD': 'CAD', 'CHF': 'CHF', 'SGD': 'SGD', 'NZD': 'NZD', 'HKD': 'HKD', 'KRW': 'KRW', 'MXN': 'MXN', 'BRL': 'BRL', 'ZAR': 'ZAR', 'RUB': 'RUB', 'SEK': 'SEK', 'NOK': 'NOK', 'DKK': 'DKK', 'PLN': 'PLN', 'TRY': 'TRY', 'AED': 'AED', 'SAR': 'SAR', 'MYR': 'MYR', 'THB': 'THB', 'IDR': 'IDR', 'PHP': 'PHP', 'VND': 'VND',
-    'RS.': 'INR', '₹': 'INR', '£': 'GBP', '€': 'EUR', '¥': 'JPY', '₩': 'KRW', 'R$': 'BRL', 'FR': 'CHF', 'KR': 'SEK', 'ZŁ': 'PLN', '₺': 'TRY', 'RM': 'MYR', '฿': 'THB', 'RP': 'IDR', '₱': 'PHP', '₫': 'VND'
-  };
 
   const getCurrencySymbol = (currency) => {
     const curr = currencies.find(c => c.value === currency);
@@ -361,7 +336,6 @@ const SubscriptionTracker = () => {
         ...prev,
         name: parsed.name || prev.name,
         cost: parsed.cost || prev.cost,
-        currency: parsed.currency || prev.currency,
         nextBillingDate: parsed.date || prev.nextBillingDate,
         image: imageBase64  // Store the image
       }));
@@ -389,7 +363,7 @@ const SubscriptionTracker = () => {
 
   const parseReceiptText = (text) => {
     const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-    let name = '', cost = '', date = '', currency = 'USD';
+    let name = '', cost = '', date = '';
     
     console.log('All extracted lines:', lines);
     
@@ -444,36 +418,36 @@ const SubscriptionTracker = () => {
       if (/^\d{1,2}[-/]\d{1,2}[-/]\d{2,4}$/.test(line.trim())) continue;
       
       const pricePatterns = [
-        { pattern: /((?:USD|INR|EUR|GBP|JPY|CNY|AUD|CAD|CHF|SGD|NZD|HKD|KRW|MXN|BRL|ZAR|RUB|SEK|NOK|DKK|PLN|TRY|AED|SAR|MYR|THB|IDR|PHP|VND|Rs\.?|₹|£|€|¥|₩|R\$|Fr|kr|zł|₺|RM|฿|Rp|₱|₫))\s*(\d{1,6}(?:[.,]\d{1,3})?)/i, priority: 10, hasCurrency: true },
-        { pattern: /(\d{1,6}(?:[.,]\d{1,3})?)\s*(?:USD|INR|EUR|GBP|JPY|CNY|AUD|CAD|CHF|SGD|NZD|HKD|KRW|MXN|BRL|ZAR|RUB|SEK|NOK|DKK|PLN|TRY|AED|SAR|MYR|THB|IDR|PHP|VND|dollars?|rupees?|euros?|pounds?|yen|yuan|francs?|kronor?|kroner?|złoty|lira|ringgit|baht|rupiah|pesos?|dong)/i, priority: 10, hasCurrency: true },
-        { pattern: /[\$£€¥₹₩₪₱₡₵₦₨₴₸]\s*(\d{1,6}(?:[.,]\d{1,3})?)/i, priority: 10, hasCurrency: true },
-        { pattern: /(\d{1,6}(?:[.,]\d{1,3})?)\s*[\$£€¥₹₩₪₱₡₵₦₨₴₸]/i, priority: 10, hasCurrency: true },
-        { pattern: /(?:price|cost|amount|total|pay|charge|fee|bill|payment)[:=\s]*(\d{2,6}(?:[.,]\d{1,3})?)/i, priority: 8, hasCurrency: false },
-        { pattern: /(\d{2,6}(?:[.,]\d{1,3})?)\s*(?:only|off|discount|per|each)/i, priority: 7, hasCurrency: false },
-        { pattern: /\b(\d{2,4})\b(?!\s*(?:day|month|year|mar|jan|feb|apr|may|jun|jul|aug|sep|oct|nov|dec|days|months|years))/i, priority: 5, hasCurrency: false }
+        { pattern: /(?:USD|INR|EUR|GBP|JPY|CNY|AUD|CAD|CHF|SGD|NZD|HKD|KRW|MXN|BRL|ZAR|RUB|SEK|NOK|DKK|PLN|TRY|AED|SAR|MYR|THB|IDR|PHP|VND|Rs\.?|₹|£|€|¥|₩|R\$|Fr|kr|zł|₺|RM|฿|Rp|₱|₫)\s*(\d{1,6}(?:[.,]\d{1,3})?)/i, priority: 10 },
+        { pattern: /(\d{1,6}(?:[.,]\d{1,3})?)\s*(?:USD|INR|EUR|GBP|JPY|CNY|AUD|CAD|CHF|SGD|NZD|HKD|KRW|MXN|BRL|ZAR|RUB|SEK|NOK|DKK|PLN|TRY|AED|SAR|MYR|THB|IDR|PHP|VND|dollars?|rupees?|euros?|pounds?|yen|yuan|francs?|kronor?|kroner?|złoty|lira|ringgit|baht|rupiah|pesos?|dong)/i, priority: 10 },
+        { pattern: /[\$£€¥₹₩₪₱₡₵₦₨₴₸]\s*(\d{1,6}(?:[.,]\d{1,3})?)/i, priority: 10 },
+        { pattern: /(\d{1,6}(?:[.,]\d{1,3})?)\s*[\$£€¥₹₩₪₱₡₵₦₨₴₸]/i, priority: 10 },
+        { pattern: /(?:price|cost|amount|total|pay|charge|fee|bill|payment)[:=\s]*(\d{2,6}(?:[.,]\d{1,3})?)/i, priority: 8 },
+        { pattern: /(\d{2,6}(?:[.,]\d{1,3})?)\s*(?:only|off|discount|per|each)/i, priority: 7 },
+        { pattern: /\b(\d{2,4})\b(?!\s*(?:day|month|year|mar|jan|feb|apr|may|jun|jul|aug|sep|oct|nov|dec|days|months|years))/i, priority: 5 }
       ];
       
-      for (const { pattern, priority, hasCurrency } of pricePatterns) {
+      for (const { pattern, priority } of pricePatterns) {
         const match = line.match(pattern);
         if (match) {
-          let amount = match[hasCurrency ? 2 : 1].replace(',', '.');
-          let detectedCurrency = 'USD';
-          if (hasCurrency) {
-            const currencyPart = match[1].toUpperCase();
-            detectedCurrency = currencyMap[currencyPart] || 'USD';
-          }
+          let amount = match[1].replace(',', '.');
           const numAmount = parseFloat(amount);
           
-          // STRICT: Must be reasonable price
+          // STRICT: Must be reasonable price AND have some currency context
+          // Reject if it's just a standalone number without currency indicator
+          const hasCurrencyContext = /[\$£€¥₹₩₪₱₡₵₦₨₴₸]|USD|INR|EUR|GBP|price|cost|amount|pay|charge|fee|bill/i.test(line);
+          
           if (numAmount >= 0.01 && numAmount <= 999999 && numAmount < 2000) {
-            potentialPrices.push({
-              amount: amount,
-              value: numAmount,
-              priority: priority,
-              line: line,
-              hasCurrency: hasCurrency,
-              currency: detectedCurrency
-            });
+            // Only add if it has currency context OR it's high priority
+            if (hasCurrencyContext || priority >= 8) {
+              potentialPrices.push({
+                amount: amount,
+                value: numAmount,
+                priority: priority,
+                line: line,
+                hasCurrency: hasCurrencyContext
+              });
+            }
           }
         }
       }
@@ -488,10 +462,9 @@ const SubscriptionTracker = () => {
     
     console.log('Potential prices found:', potentialPrices);
     
-    // Pick the best one
-    if (potentialPrices.length > 0) {
+    // Pick the best one ONLY if it has currency context
+    if (potentialPrices.length > 0 && potentialPrices[0].hasCurrency) {
       cost = potentialPrices[0].amount;
-      currency = potentialPrices[0].currency;
     }
     
     // STRICT: Look for dates with better patterns
@@ -543,8 +516,8 @@ const SubscriptionTracker = () => {
       date = potentialDates[0].date;
     }
     
-    console.log('Final parsed results:', { name, cost, date, currency });
-    return { name, cost, date, currency };
+    console.log('Final parsed results:', { name, cost, date });
+    return { name, cost, date };
   };
 
   const handleNameChange = (name) => {
