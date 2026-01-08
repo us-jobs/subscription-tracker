@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { X, ChevronRight, ChevronLeft, Camera, PieChart, Settings, Rocket } from 'lucide-react';
+import { X, ChevronRight, ChevronLeft, Camera, PieChart, Rocket, Sparkles } from 'lucide-react';
 
 const TourGuide = ({ onComplete }) => {
     const [step, setStep] = useState(0);
@@ -22,9 +22,9 @@ const TourGuide = ({ onComplete }) => {
             icon: <PieChart size={48} className="text-pink-500" />
         },
         {
-            title: "⚙️ Supercharge with Gemini",
+            title: "✨ Supercharge with Gemini",
             content: "Use the 'Enable AI' button to connect your own Google Gemini API Key. This unlocks 'Pro Mode' for highly accurate, detailed scanning.",
-            icon: <Settings size={48} className="text-gray-700" />
+            icon: <Sparkles size={48} className="text-indigo-600" />
         }
     ];
 

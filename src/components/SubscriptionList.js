@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Edit2, Trash2, Filter } from 'lucide-react';
+import { Edit2, Trash2, Filter, FileText } from 'lucide-react';
 
 const SubscriptionList = ({ subscriptions, onEdit, onDelete, onImageClick }) => {
     const [sortBy, setSortBy] = useState('date'); // 'date', 'cost-desc', 'cost-asc', 'name'
@@ -76,13 +76,17 @@ const SubscriptionList = ({ subscriptions, onEdit, onDelete, onImageClick }) => 
                         {upcoming.map(sub => (
                             <div key={sub.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
                                 <div className="flex items-center gap-2 flex-1 min-w-0 mr-2">
-                                    {sub.image && (
+                                    {sub.image ? (
                                         <img
                                             src={sub.image}
                                             alt={sub.name}
-                                            className="w-10 h-10 rounded object-cover flex-shrink-0 cursor-pointer hover:opacity-80 transition"
+                                            className="w-10 h-10 rounded-lg object-cover flex-shrink-0 cursor-pointer hover:opacity-80 transition border border-gray-100"
                                             onClick={() => onImageClick(sub.image)}
                                         />
+                                    ) : (
+                                        <div className="w-10 h-10 rounded-lg bg-white flex items-center justify-center text-gray-300 border border-dashed border-gray-200 shrink-0">
+                                            <FileText size={16} />
+                                        </div>
                                     )}
                                     <div className="flex-1 min-w-0">
                                         <div className="font-semibold text-gray-800 text-sm truncate">{sub.name}</div>
@@ -143,12 +147,12 @@ const SubscriptionList = ({ subscriptions, onEdit, onDelete, onImageClick }) => 
                                         <img
                                             src={sub.image}
                                             alt={sub.name}
-                                            className="w-12 h-12 sm:w-14 sm:h-14 rounded object-cover flex-shrink-0 cursor-pointer hover:opacity-80 transition bg-gray-100"
+                                            className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl object-cover flex-shrink-0 cursor-pointer hover:opacity-80 transition bg-gray-100 border border-gray-100"
                                             onClick={() => onImageClick(sub.image)}
                                         />
                                     ) : (
-                                        <div className="w-12 h-12 sm:w-14 sm:h-14 rounded bg-gray-100 flex items-center justify-center text-gray-400 text-xs text-center p-1">
-                                            No Img
+                                        <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-gray-50 flex items-center justify-center text-gray-300 border border-dashed border-gray-200" title="Manually Added">
+                                            <FileText size={20} />
                                         </div>
                                     )}
                                     <div className="flex-1 min-w-0">

@@ -32,5 +32,5 @@ export const loadUserProfile = () => {
 export const saveUserProfile = (profile) => {
     if (profile.name !== undefined) localStorage.setItem('userName', profile.name);
     if (profile.reminderDays !== undefined) localStorage.setItem('reminderDays', JSON.stringify(profile.reminderDays));
-    if (profile.notificationsEnabled !== undefined) localStorage.setItem('notificationsEnabled', profile.notificationsEnabled);
+    if (profile.notificationsEnabled !== undefined) localStorage.setItem('notificationsEnabled', String(profile.notificationsEnabled));
 };
