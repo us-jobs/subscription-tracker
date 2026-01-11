@@ -16,6 +16,9 @@ import AIErrorModal from './components/AIErrorModal';
 
 import { processImageWithGemini } from './utils/geminiProcessor';
 import { loadSubscriptions, saveSubscriptions, loadUserProfile, saveUserProfile } from './utils/storage';
+import { checkAndSendNotifications } from './utils/notificationService';
+import NotificationSetupModal from './components/NotificationSetupModal';
+
 import { Camera, Upload, FileText, PieChart, List, AlertTriangle, Check, X, ShieldAlert, Download } from 'lucide-react';
 
 const App = () => {
@@ -32,6 +35,7 @@ const App = () => {
   const [previewImage, setPreviewImage] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [notification, setNotification] = useState({ message: '', type: '' });
+  const [showNotificationSetup, setShowNotificationSetup] = useState(false);
 
   // Modals
   const [showNamePrompt, setShowNamePrompt] = useState(false);
@@ -68,6 +72,16 @@ const App = () => {
     if ('Notification' in window && Notification.permission === 'granted') {
       setProfile(prev => ({ ...prev, notificationsEnabled: true }));
     }
+
+    const hasSeenNotificationPrompt = localStorage.getItem('hasSeenNotificationPrompt');
+    if (!hasSeenNotificationPrompt && 'Notification' in window) {
+      // Show notification setup after a short delay (so they see the app first)
+      setTimeout(() => {
+        if (Notification.permission === 'default') {
+          setShowNotificationSetup(true);
+        }
+      }, 3000); // Show after 3 seconds
+    }
   }, []);
 
   // Save Data
@@ -81,31 +95,17 @@ const App = () => {
 
   // Check for upcoming notifications
   useEffect(() => {
-    if (profile.notificationsEnabled && subscriptions.length > 0) {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-
-      subscriptions.forEach(sub => {
-        const nextDate = new Date(sub.nextBillingDate);
-        nextDate.setHours(0, 0, 0, 0);
-
-        const diffTime = nextDate - today;
-        const daysUntil = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-        // Send reminder if sub is due within reminderDays (e.g., 1 or 3 days away)
-        if (profile.reminderDays.includes(daysUntil)) {
-          const lastNotifiedKey = `notified_${sub.id}_${sub.nextBillingDate}_${daysUntil}`;
-          if (!localStorage.getItem(lastNotifiedKey)) {
-            new Notification('Subscription Reminder 📅', {
-              body: `${sub.name} renewal of ${sub.cost} ${sub.currency} is in ${daysUntil} day(s).`,
-              icon: '/logo192.png' // Adjust if you have a specific icon
-            });
-            localStorage.setItem(lastNotifiedKey, 'true');
-          }
-        }
-      });
-    }
-  }, [subscriptions, profile.notificationsEnabled, profile.reminderDays]);
+    // Initial check
+    checkAndSendNotifications(subscriptions, profile);
+    
+    // Set up periodic checking every hour (3600000 ms)
+    const interval = setInterval(() => {
+      checkAndSendNotifications(subscriptions, profile);
+    }, 3600000); // Check every hour
+    
+    // Cleanup interval on unmount or when dependencies change
+    return () => clearInterval(interval);
+  }, [subscriptions, profile, profile.notificationsEnabled, profile.reminderDays]);
 
   const handleSaveSettings = (key) => {
     const cleanKey = key ? key.trim() : '';
@@ -144,7 +144,16 @@ const App = () => {
       setShowNotificationSettings(true);
     }
   };
+  const handleNotificationSetupComplete = () => {
+    localStorage.setItem('hasSeenNotificationPrompt', 'true');
+    setProfile(prev => ({ ...prev, notificationsEnabled: true }));
+    setShowNotificationSetup(false);
+  };
 
+  const handleNotificationSetupClose = () => {
+    localStorage.setItem('hasSeenNotificationPrompt', 'true');
+    setShowNotificationSetup(false);
+  };
   const handleDeleteSubscription = (id) => {
     setSubToDelete(id);
     setShowDeleteConfirm(true);
@@ -268,7 +277,11 @@ const App = () => {
   };
 
   const handleRequestNotifications = async () => {
-    if (!('Notification' in window)) return;
+    if (!('Notification' in window)) {
+      setNotification({ message: 'Notifications not supported in this browser', type: 'error' });
+      setTimeout(() => setNotification({ message: '', type: '' }), 3000);
+      return;
+    }
 
     // If permission already granted, just show settings to tweak days
     if (Notification.permission === 'granted') {
@@ -276,17 +289,68 @@ const App = () => {
       return;
     }
 
+    // If permission was previously denied, show helpful message
+    if (Notification.permission === 'denied') {
+      setNotification({ 
+        message: 'Notifications were blocked. Please enable them in your browser settings (click the lock icon in the address bar).', 
+        type: 'error' 
+      });
+      setTimeout(() => setNotification({ message: '', type: '' }), 5000);
+      return;
+    }
+
+    // Permission is 'default', request it
     const permission = await Notification.requestPermission();
     if (permission === 'granted') {
       setShowNotificationSettings(true);
+    } else if (permission === 'denied') {
+      setNotification({ 
+        message: 'Notification permission denied. Please enable in browser settings (click the lock icon in the address bar).', 
+        type: 'error' 
+      });
+      setTimeout(() => setNotification({ message: '', type: '' }), 5000);
     }
   };
 
-  const handleSaveNotificationSettings = (days) => {
-    setProfile(prev => ({ ...prev, notificationsEnabled: true, reminderDays: days }));
-    setShowNotificationSettings(false);
-    setNotification({ message: 'Notification settings updated!', type: 'success' });
-    setTimeout(() => setNotification({ message: '', type: '' }), 3000);
+  const handleSaveNotificationSettings = async (days) => {
+    if (!('Notification' in window)) {
+      setNotification({ message: 'Notifications not supported in this browser', type: 'error' });
+      setTimeout(() => setNotification({ message: '', type: '' }), 3000);
+      return;
+    }
+
+    let permission = Notification.permission;
+    
+    // If permission was previously denied, we can't request it again
+    if (permission === 'denied') {
+      setNotification({ 
+        message: 'Notifications were blocked. Please enable them in browser settings (click the lock icon in the address bar), then refresh the page.', 
+        type: 'error' 
+      });
+      setTimeout(() => setNotification({ message: '', type: '' }), 5000);
+      return;
+    }
+
+    // If permission is not granted, request it
+    if (permission !== 'granted') {
+      permission = await Notification.requestPermission();
+    }
+
+    if (permission === 'granted') {
+      setProfile(prev => ({ ...prev, notificationsEnabled: true, reminderDays: days }));
+      setShowNotificationSettings(false);
+      setNotification({ message: 'Notification settings updated!', type: 'success' });
+      setTimeout(() => setNotification({ message: '', type: '' }), 3000);
+
+      // Trigger an immediate check so they see it working if they have a due sub
+      checkAndSendNotifications(subscriptions, { ...profile, notificationsEnabled: true, reminderDays: days });
+    } else {
+      setNotification({ 
+        message: 'Notification permission denied. Please enable in browser settings (click the lock icon in the address bar), then refresh the page.', 
+        type: 'error' 
+      });
+      setTimeout(() => setNotification({ message: '', type: '' }), 5000);
+    }
   };
 
   return (
@@ -490,6 +554,12 @@ const App = () => {
           </div>
         )}
       </div>
+      {showNotificationSetup && (
+        <NotificationSetupModal
+          onClose={handleNotificationSetupClose}
+          onSuccess={handleNotificationSetupComplete}
+        />
+      )}
     </div>
   );
 };

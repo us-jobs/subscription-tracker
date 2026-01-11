@@ -9,7 +9,12 @@ const urlsToCache = [
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(urlsToCache))
+      .then(cache => {
+        // Cache files one by one, ignoring failures
+        return Promise.allSettled(
+          urlsToCache.map(url => cache.add(url))
+        );
+      })
   );
 });
 

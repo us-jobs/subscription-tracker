@@ -119,6 +119,7 @@ const GuidanceSections = () => {
                     </div>
                 </div>
             </section>
+
         </div>
     );
 };

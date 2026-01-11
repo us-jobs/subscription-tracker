@@ -50,6 +50,9 @@ const SubscriptionForm = ({
         { value: 'JPY', label: 'JPY (¥)' }, { value: 'CNY', label: 'CNY (¥)' }, { value: 'KRW', label: 'KRW (₩)' }
     ];
 
+    // Get today's date in YYYY-MM-DD format for min date
+    const today = new Date().toISOString().split('T')[0];
+
     return (
         <div className="bg-white rounded-2xl shadow-lg p-4 sm:p-6 mb-4 sm:mb-6">
             <div className="flex justify-between items-center mb-4">
@@ -130,6 +133,7 @@ const SubscriptionForm = ({
                 <div>
                     <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Next Billing <span className="text-red-500">*</span></label>
                     <input type="date" value={formData.nextBillingDate}
+                        min={today}
                         onChange={(e) => { setFormData({ ...formData, nextBillingDate: e.target.value }); if (errors.nextBillingDate) setErrors({ ...errors, nextBillingDate: '' }); }}
                         className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 text-sm ${errors.nextBillingDate ? 'border-red-500' : ''}`} />
                     {errors.nextBillingDate && <div className="mt-1 text-xs text-red-600">{errors.nextBillingDate}</div>}
@@ -147,6 +151,7 @@ const SubscriptionForm = ({
                     <div>
                         <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Trial End <span className="text-red-500">*</span></label>
                         <input type="date" value={formData.trialEndDate}
+                            min={today}
                             onChange={(e) => { setFormData({ ...formData, trialEndDate: e.target.value }); if (errors.trialEndDate) setErrors({ ...errors, trialEndDate: '' }); }}
                             className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 text-sm ${errors.trialEndDate ? 'border-red-500' : ''}`} />
                         {errors.trialEndDate && <div className="mt-1 text-xs text-red-600">{errors.trialEndDate}</div>}
