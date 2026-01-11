@@ -130,20 +130,27 @@ const App = () => {
 
   // Handlers
   const handleSaveSubscription = (data) => {
-    if (data.id) {
-      setSubscriptions(prev => prev.map(s => s.id === data.id ? data : s));
-    } else {
-      const newSub = { ...data, id: Date.now(), status: 'active' };
-      setSubscriptions(prev => [...prev, newSub]);
-    }
-    setView('list');
-    setEditingSub(null);
+      if (data.id) {
+          setSubscriptions(prev => prev.map(s => s.id === data.id ? data : s));
+      } else {
+          const newSub = { 
+              ...data, 
+              id: Date.now(), 
+              status: 'active',
+              // Ensure the date is stored in a consistent format
+              nextBillingDate: new Date(data.nextBillingDate).toISOString().split('T')[0]
+          };
+          setSubscriptions(prev => [...prev, newSub]);
+      }
+      setView('list');
+      setEditingSub(null);
 
-    // After adding a sub, if notifications are disabled, prompt for them
-    if (!profile.notificationsEnabled && !data.id) {
-      setShowNotificationSettings(true);
-    }
+      // Don't check notifications immediately after adding - wait 2 seconds
+      setTimeout(() => {
+          checkAndSendNotifications(subscriptions, profile);
+      }, 2000);
   };
+
   const handleNotificationSetupComplete = () => {
     localStorage.setItem('hasSeenNotificationPrompt', 'true');
     setProfile(prev => ({ ...prev, notificationsEnabled: true }));

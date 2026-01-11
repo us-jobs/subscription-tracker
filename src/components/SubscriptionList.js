@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Edit2, Trash2, Filter, FileText } from 'lucide-react';
 
 const SubscriptionList = ({ subscriptions, onEdit, onDelete, onImageClick }) => {
@@ -18,21 +18,40 @@ const SubscriptionList = ({ subscriptions, onEdit, onDelete, onImageClick }) => 
 
     const getUpcoming = () => {
         const today = new Date();
-        today.setHours(0, 0, 0, 0);
-
+        // Normalize to start of day in local timezone
+        const todayNormalized = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        
         return subscriptions
             .map(sub => {
+                if (!sub.nextBillingDate) return null;
+                
+                // Parse the date string properly for mobile
                 const nextDate = new Date(sub.nextBillingDate);
-                nextDate.setHours(0, 0, 0, 0);
-                const diffTime = nextDate - today;
+                // Normalize to start of day in local timezone
+                const nextDateNormalized = new Date(nextDate.getFullYear(), nextDate.getMonth(), nextDate.getDate());
+                
+                const diffTime = nextDateNormalized - todayNormalized;
                 const daysUntil = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
                 return { ...sub, daysUntil };
             })
-            .filter(sub => sub.daysUntil >= 0 && sub.daysUntil <= 30)
+            .filter(sub => sub !== null && sub.daysUntil >= 0 && sub.daysUntil <= 30)
             .sort((a, b) => a.daysUntil - b.daysUntil);
     };
 
     const upcoming = getUpcoming();
+    
+    useEffect(() => {
+        console.log('📅 Date Debug:', {
+            today: new Date().toISOString(),
+            todayLocal: new Date().toString(),
+            subscriptions: subscriptions.map(sub => ({
+                name: sub.name,
+                nextBillingDate: sub.nextBillingDate,
+                parsed: new Date(sub.nextBillingDate).toString(),
+                daysUntil: getUpcoming().find(s => s.id === sub.id)?.daysUntil
+            }))
+        });
+    }, [subscriptions]);
 
     const getFilteredAndSorted = () => {
         let filtered = [...subscriptions];
@@ -90,8 +109,12 @@ const SubscriptionList = ({ subscriptions, onEdit, onDelete, onImageClick }) => 
                                     )}
                                     <div className="flex-1 min-w-0">
                                         <div className="font-semibold text-gray-800 text-sm truncate">{sub.name}</div>
-                                        <div className="text-xs text-gray-600">{sub.daysUntil === 0 ? 'Today' : sub.daysUntil === 1 ? 'Tomorrow' : `${sub.daysUntil} days`}</div>
-                                    </div>
+                                            <div className="text-xs text-gray-600">
+                                                {sub.daysUntil === 0 ? 'Today' : 
+                                                sub.daysUntil === 1 ? 'Tomorrow' : 
+                                                `${sub.daysUntil} days`}
+                                            </div>                                    
+                                        </div>
                                 </div>
                                 <div className="text-right flex-shrink-0">
                                     <div className="font-bold text-gray-800 text-sm">{getCurrencySymbol(sub.currency)}{sub.cost}</div>
