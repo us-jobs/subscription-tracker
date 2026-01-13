@@ -22,8 +22,8 @@ import { Camera, Upload, FileText, PieChart, List, AlertTriangle, Check, X, Shie
 
 const App = () => {
   // Data State
-  const [subscriptions, setSubscriptions] = useState([]);
-  const [profile, setProfile] = useState({ name: '', reminderDays: [1, 3], notificationsEnabled: false });
+  const [subscriptions, setSubscriptions] = useState(() => loadSubscriptions());
+  const [profile, setProfile] = useState(() => loadUserProfile());
   const [apiKey, setApiKey] = useState('');
   const [tempName, setTempName] = useState('');
   const [nameError, setNameError] = useState('');
@@ -46,19 +46,16 @@ const App = () => {
   const [showAIError, setShowAIError] = useState({ show: false, error: '' });
   const [lastAIAction, setLastAIAction] = useState('');
   const [subToDelete, setSubToDelete] = useState(null);
+  const [pendingSubscription, setPendingSubscription] = useState(null);
 
   const fileInputRef = useRef(null);
   const isInitialMount = useRef(true);
 
   // Load Initial Data
   useEffect(() => {
-    const subs = loadSubscriptions();
-    setSubscriptions(subs);
-
-    const userProfile = loadUserProfile();
-    setProfile(userProfile);
-    if (userProfile.name) {
-      setTempName(userProfile.name);
+    // Initialize UI based on loaded profile
+    if (profile.name) {
+      setTempName(profile.name);
     } else {
       setShowNamePrompt(true);
     }
@@ -75,8 +72,14 @@ const App = () => {
 
     // Register service worker for better notification support on mobile
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(() => {
-        console.log('Service worker registration skipped');
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+          .then(registration => {
+            console.log('✅ Service Worker registered successfully:', registration.scope);
+          })
+          .catch(error => {
+            console.error('❌ Service Worker registration failed:', error);
+          });
       });
     }
   }, []);
@@ -99,9 +102,9 @@ const App = () => {
       daysUntil,
       timestamp: new Date()
     };
-    
+
     setNotificationPopups(prev => [...prev, newPopup]);
-    
+
     // Auto-remove after 10 seconds
     setTimeout(() => {
       setNotificationPopups(prev => prev.filter(p => p.id !== id));
@@ -122,14 +125,14 @@ const App = () => {
     if (profile.notificationsEnabled && subscriptions.length > 0) {
       const lastCheckDate = localStorage.getItem('lastNotificationCheck');
       const today = new Date().toDateString();
-      
+
       if (lastCheckDate !== today) {
         const result = checkAndSendNotifications(
-          subscriptions, 
-          profile, 
+          subscriptions,
+          profile,
           showNotificationPopup
         );
-        
+
         if (result.sent > 0) {
           localStorage.setItem('lastNotificationCheck', today);
         }
@@ -172,10 +175,21 @@ const App = () => {
       return;
     }
 
-    console.log('🧪 Testing Universal Notifications...');
+    // Detailed mobile debugging
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    const isAndroid = /Android/i.test(navigator.userAgent);
+    const isChrome = /Chrome/i.test(navigator.userAgent);
+
+    console.log('🧪 === MOBILE NOTIFICATION DEBUG ===');
+    console.log('📱 Device Type:', isMobile ? 'MOBILE' : 'DESKTOP');
+    console.log('🤖 Android:', isAndroid);
+    console.log('🌐 Chrome:', isChrome);
     console.log('📱 User Agent:', navigator.userAgent);
-    console.log('🔔 Notification Permission:', Notification.permission);
-    console.log('🌐 Platform:', navigator.platform);
+    console.log('🔔 Notification Support:', 'Notification' in window);
+    console.log('🔐 Permission:', Notification.permission);
+    console.log('👤 Profile:', profile);
+    console.log('📦 Subscriptions:', subscriptions.length);
+    console.log('📅 Reminder Days:', profile.reminderDays);
 
     // Clear previous notification flags
     Object.keys(localStorage).forEach(key => {
@@ -185,48 +199,72 @@ const App = () => {
     });
 
     try {
+      console.log('🚀 Starting notification test...');
+
       const result = checkAndSendNotifications(
-        subscriptions, 
-        profile, 
+        subscriptions,
+        profile,
         showNotificationPopup
       );
-      
-      console.log('📊 Test Result:', result);
-      
+
+      console.log('📊 === TEST RESULT ===');
+      console.log('✅ Sent:', result.sent);
+      console.log('⏭️ Skipped:', result.skipped);
+      console.log('❌ Errors:', result.errors);
+
       if (result.sent > 0) {
-        setNotification({ 
-          message: `✅ ${result.sent} notification(s) sent! Check in-app popup & system notifications 🔔`, 
-          type: 'success' 
+        setNotification({
+          message: `✅ ${result.sent} notification(s) sent! ${isMobile ? 'Check popup above & notification shade' : 'Check popup & notification center'}`,
+          type: 'success'
+        });
+      } else if (result.skipped > 0) {
+        setNotification({
+          message: `⚠️ No subscriptions match your reminder days (${profile.reminderDays.join(', ')} days)`,
+          type: 'error'
         });
       } else {
-        setNotification({ 
-          message: `⚠️ No subscriptions match your reminder days (${profile.reminderDays.join(', ')} days)`, 
-          type: 'error' 
+        setNotification({
+          message: '⚠️ No notifications sent. Check console for details.',
+          type: 'error'
         });
       }
-      
+
       setTimeout(() => setNotification({ message: '', type: '' }), 5000);
     } catch (error) {
-      console.error('❌ Test notification error:', error);
+      console.error('❌ === TEST ERROR ===');
+      console.error('Error:', error);
+      console.error('Stack:', error.stack);
       setNotification({ message: `❌ Error: ${error.message}`, type: 'error' });
       setTimeout(() => setNotification({ message: '', type: '' }), 5000);
     }
   };
 
   const handleSaveSubscription = (data) => {
-      if (data.id) {
-          setSubscriptions(prev => prev.map(s => s.id === data.id ? data : s));
-      } else {
-          const newSub = { 
-              ...data, 
-              id: Date.now(), 
-              status: 'active',
-              nextBillingDate: new Date(data.nextBillingDate).toISOString().split('T')[0]
-          };
-          setSubscriptions(prev => [...prev, newSub]);
-      }
+    if (data.id) {
+      setSubscriptions(prev => prev.map(s => s.id === data.id ? data : s));
       setView('list');
       setEditingSub(null);
+    } else {
+      // Check if notifications are enabled before saving new subscription
+      if ('Notification' in window && Notification.permission !== 'granted') {
+        console.log('🚫 Permission missing, blocking save...');
+        // Force state sync: if permission is missing, profile should reflect that
+        setProfile(prev => ({ ...prev, notificationsEnabled: false }));
+        setPendingSubscription(data);
+        setShowNotificationSettings(true);
+        return;
+      }
+
+      const newSub = {
+        ...data,
+        id: Date.now(),
+        status: 'active',
+        nextBillingDate: new Date(data.nextBillingDate).toISOString().split('T')[0]
+      };
+      setSubscriptions(prev => [...prev, newSub]);
+      setView('list');
+      setEditingSub(null);
+    }
   };
 
   const handleDeleteSubscription = (id) => {
@@ -370,28 +408,82 @@ const App = () => {
     }
   };
 
-  const handleSaveNotificationSettings = (days) => {
+  const handleSaveNotificationSettings = async (days) => {
+    console.log('💾 handleSaveNotificationSettings called', { pending: !!pendingSubscription, permission: Notification.permission });
+
+    // Always request permission if not granted yet
+    if ('Notification' in window && Notification.permission !== 'granted') {
+      console.log('🔔 Requesting permission...');
+      try {
+        const permission = await Notification.requestPermission();
+        console.log('🔔 Permission result:', permission);
+
+        if (permission !== 'granted') {
+          // If blocking logic is needed (pending sub), we show specific error
+          if (pendingSubscription) {
+            setNotification({ message: 'Notifications must be allowed to add a subscription', type: 'error' });
+          } else {
+            setNotification({ message: 'Notification permission denied', type: 'error' });
+          }
+          setTimeout(() => setNotification({ message: '', type: '' }), 3000);
+          return; // Do not close modal, do not save state as enabled
+        }
+      } catch (error) {
+        console.error('❌ Permission request failed:', error);
+        return;
+      }
+    }
+
     setProfile(prev => ({ ...prev, notificationsEnabled: true, reminderDays: days }));
+
+    // Process pending subscription if exists
+    if (pendingSubscription) {
+      const newSub = {
+        ...pendingSubscription,
+        id: Date.now(),
+        status: 'active',
+        nextBillingDate: new Date(pendingSubscription.nextBillingDate).toISOString().split('T')[0]
+      };
+      setSubscriptions(prev => [...prev, newSub]);
+      setPendingSubscription(null);
+      setView('list');
+      setEditingSub(null);
+      setNotification({ message: 'Subscription added & notifications enabled!', type: 'success' });
+    } else {
+      setNotification({ message: 'Notification settings updated!', type: 'success' });
+    }
+
     setShowNotificationSettings(false);
-    setNotification({ message: 'Notification settings updated!', type: 'success' });
     setTimeout(() => setNotification({ message: '', type: '' }), 3000);
     localStorage.removeItem('lastNotificationCheck');
+  };
+
+  const handleCloseNotificationSettings = () => {
+    if (pendingSubscription) {
+      setNotification({ message: 'To add a subscription notification must be turned on', type: 'error' });
+      setTimeout(() => setNotification({ message: '', type: '' }), 3000);
+      // Do NOT close modal
+    } else {
+      setShowNotificationSettings(false);
+    }
   };
 
   return (
     <div className="min-h-screen bg-gray-50 p-2 sm:p-4 font-sans text-gray-900">
       <div className="max-w-2xl mx-auto">
 
-        {/* Notification Popups */}
-        <div className="fixed top-20 right-4 z-[200] space-y-3 max-w-sm">
-          {notificationPopups.map(popup => (
-            <NotificationPopup
-              key={popup.id}
-              subscription={popup.subscription}
-              daysUntil={popup.daysUntil}
-              onClose={() => removeNotificationPopup(popup.id)}
-            />
-          ))}
+        {/* Notification Popups - Mobile optimized positioning */}
+        <div className="fixed top-4 left-0 right-0 z-[200] px-2 sm:px-4 pointer-events-none">
+          <div className="max-w-sm ml-auto space-y-3 pointer-events-auto">
+            {notificationPopups.map(popup => (
+              <NotificationPopup
+                key={popup.id}
+                subscription={popup.subscription}
+                daysUntil={popup.daysUntil}
+                onClose={() => removeNotificationPopup(popup.id)}
+              />
+            ))}
+          </div>
         </div>
 
         {showNamePrompt && (
@@ -482,7 +574,7 @@ const App = () => {
 
         {showNotificationSettings && (
           <NotificationSettingsModal
-            onClose={() => setShowNotificationSettings(false)}
+            onClose={handleCloseNotificationSettings}
             onSave={handleSaveNotificationSettings}
             currentDays={profile.reminderDays}
             isEnabling={!profile.notificationsEnabled}
@@ -525,7 +617,7 @@ const App = () => {
         {(view === 'list' || view === 'analytics') && (
           <>
             <SummaryCards totals={calculateTotals()} count={subscriptions.length} />
-            
+
             {profile.notificationsEnabled && subscriptions.length > 0 && view === 'list' && (
               <div className="mb-4">
                 <button

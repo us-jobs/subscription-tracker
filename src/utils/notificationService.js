@@ -1,11 +1,11 @@
 export const checkAndSendNotifications = (
-  subscriptions, 
-  profile, 
-  showInAppPopup = null,
-  NotificationAPI = window.Notification, 
-  StorageAPI = localStorage
+    subscriptions,
+    profile,
+    showInAppPopup = null,
+    NotificationAPI = window.Notification,
+    StorageAPI = localStorage
 ) => {
-    // Early return if notifications are disabled or not supported
+    // Early return if notifications are disabled or no subscriptions
     if (!profile.notificationsEnabled || subscriptions.length === 0) {
         console.log('❌ Notifications disabled or no subscriptions');
         return { sent: 0, skipped: 0, errors: [] };
@@ -14,15 +14,32 @@ export const checkAndSendNotifications = (
     const today = new Date();
     const todayNormalized = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
+    // Mobile detection
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+    const isAndroid = /Android/i.test(navigator.userAgent);
+    const isInStandaloneMode = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+
+    const canUseBrowserNotifications = NotificationAPI &&
+        NotificationAPI.permission === 'granted' &&
+        !(isIOS && !isInStandaloneMode);
+
     let sentCount = 0;
     let skippedCount = 0;
     const errors = [];
 
-    console.log('🔔 Starting Universal Notification Check...');
+    console.log('🔔 === NOTIFICATION CHECK START ===');
     console.log('📅 Today:', todayNormalized.toDateString());
     console.log('⚙️ Reminder days:', profile.reminderDays);
-    console.log('📱 Device:', navigator.userAgent);
+    console.log('📱 Device:', { isMobile, isIOS, isAndroid, isInStandaloneMode });
     console.log('🔐 Browser Notification Permission:', NotificationAPI ? NotificationAPI.permission : 'N/A');
+    console.log('👤 User Agent:', navigator.userAgent);
+
+    // iOS Safari warning
+    if (isIOS && !isInStandaloneMode) {
+        console.warn('⚠️ iOS Safari detected. Browser notifications NOT supported. Only in-app popups will work.');
+        console.warn('💡 To enable browser notifications on iOS: Add this app to Home Screen (PWA mode)');
+    }
 
     subscriptions.forEach(sub => {
         if (!sub.nextBillingDate) {
@@ -50,68 +67,88 @@ export const checkAndSendNotifications = (
             if (StorageAPI.getItem(lastNotifiedKey) !== 'true') {
                 let notificationSent = false;
 
-                // 1. ALWAYS show in-app popup (works everywhere)
+                // ==========================================
+                // 1. IN-APP POPUP (Works everywhere including iOS)
+                // ==========================================
                 if (showInAppPopup && typeof showInAppPopup === 'function') {
                     try {
                         console.log(`📱 Showing in-app popup for ${sub.name}...`);
-                        showInAppPopup(sub, daysUntil);
+
+                        // Delay on mobile to ensure DOM is ready
+                        if (isMobile) {
+                            setTimeout(() => {
+                                showInAppPopup(sub, daysUntil);
+                                console.log(`✅ In-app popup triggered for ${sub.name} (mobile)`);
+                            }, 100);
+                        } else {
+                            showInAppPopup(sub, daysUntil);
+                            console.log(`✅ In-app popup shown for ${sub.name} (desktop)`);
+                        }
                         notificationSent = true;
-                        console.log(`✅ In-app popup shown for ${sub.name}`);
                     } catch (error) {
                         console.error(`❌ Failed to show in-app popup for ${sub.name}:`, error);
                         errors.push({ subscription: sub.name, type: 'in-app', error: error.message });
                     }
                 }
 
-                // 2. ALSO send browser/system notification (if supported)
-                if (NotificationAPI && NotificationAPI.permission === 'granted') {
+                // ==========================================
+                // 2. BROWSER NOTIFICATION (Skip on iOS Safari)
+                // ==========================================
+                if (canUseBrowserNotifications) {
                     try {
                         const notificationTitle = '🔔 Subscription Reminder';
                         const notificationBody = `${sub.name} renewal of ${sub.cost} ${sub.currency} is ${daysUntil === 0 ? 'today' : daysUntil === 1 ? 'tomorrow' : `in ${daysUntil} days`}!`;
-                        
+
                         console.log(`🔔 Sending browser notification for ${sub.name}...`);
-                        
-                        // Detect mobile vs desktop for different notification strategies
-                        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-                        
-                        // Simple notification options that work everywhere
+
+                        // Build notification options
                         const notificationOptions = {
                             body: notificationBody,
                             icon: sub.image || '/logo192.png',
+                            badge: '/logo192.png',
                             tag: lastNotifiedKey,
-                            requireInteraction: isMobile, // Keep on screen on mobile
-                            silent: false
+                            requireInteraction: isMobile, // Keep visible on mobile
+                            silent: false,
+                            timestamp: Date.now()
                         };
 
-                        // Only add advanced features if they won't cause errors
-                        try {
-                            // Add vibration on mobile devices (not all browsers support this)
-                            if (isMobile && 'vibrate' in navigator) {
+                        // Add Android-specific features
+                        if (isAndroid) {
+                            if ('vibrate' in navigator) {
                                 notificationOptions.vibrate = [200, 100, 200];
+                                console.log('📳 Added vibration pattern for Android');
                             }
-                        } catch (e) {
-                            console.log('Vibration not supported');
                         }
-                        
+
+                        // Create notification
                         const notification = new NotificationAPI(notificationTitle, notificationOptions);
-                        
-                        notification.onclick = function(event) {
+
+                        notification.onclick = function (event) {
                             event.preventDefault();
+                            console.log(`👆 Browser notification clicked for ${sub.name}`);
                             window.focus();
                             notification.close();
-                            console.log(`👆 Browser notification clicked for ${sub.name}`);
                         };
-                        
-                        notification.onerror = function(event) {
+
+                        notification.onerror = function (event) {
                             console.error(`❌ Notification error for ${sub.name}:`, event);
                         };
-                        
-                        // Auto-close after 15 seconds on desktop, 30 on mobile
+
+                        notification.onshow = function () {
+                            console.log(`👀 Notification shown for ${sub.name}`);
+                        };
+
+                        // Auto-close after timeout
                         const autoCloseTime = isMobile ? 30000 : 15000;
                         setTimeout(() => {
-                            notification.close();
+                            try {
+                                notification.close();
+                                console.log(`🔕 Auto-closed notification for ${sub.name}`);
+                            } catch (e) {
+                                // Notification may already be closed
+                            }
                         }, autoCloseTime);
-                        
+
                         notificationSent = true;
                         console.log(`✅ Browser notification sent for ${sub.name} (${daysUntil} days)`);
                     } catch (error) {
@@ -119,10 +156,13 @@ export const checkAndSendNotifications = (
                         errors.push({ subscription: sub.name, type: 'browser', error: error.message });
                     }
                 } else {
+                    // Log why browser notifications were skipped
                     if (!NotificationAPI) {
-                        console.log('⚠️ Browser notifications not supported on this device');
+                        console.log('⏭️ Browser notifications not supported on this device');
                     } else if (NotificationAPI.permission !== 'granted') {
-                        console.log('⚠️ Browser notification permission not granted');
+                        console.log('⏭️ Browser notification permission not granted');
+                    } else if (isIOS && !isInStandaloneMode) {
+                        console.log('⏭️ iOS Safari - browser notifications skipped (use PWA mode or in-app popup)');
                     }
                 }
 
@@ -130,11 +170,13 @@ export const checkAndSendNotifications = (
                 if (notificationSent) {
                     StorageAPI.setItem(lastNotifiedKey, 'true');
                     sentCount++;
+                    console.log(`✅ Marked as notified: ${lastNotifiedKey}`);
                 } else {
-                    errors.push({ 
-                        subscription: sub.name, 
-                        type: 'all', 
-                        error: 'All notification methods failed' 
+                    console.error(`❌ All notification methods failed for ${sub.name}`);
+                    errors.push({
+                        subscription: sub.name,
+                        type: 'all',
+                        error: 'All notification methods failed'
                     });
                 }
             } else {
@@ -147,9 +189,10 @@ export const checkAndSendNotifications = (
     });
 
     const result = { sent: sentCount, skipped: skippedCount, errors };
-    console.log('📊 Universal Notification Check Complete:', result);
+    console.log('🏁 === NOTIFICATION CHECK COMPLETE ===');
+    console.log('📊 Result:', result);
     console.log('✅ In-app popups: Always shown when subscription matches');
-    console.log('🔔 Browser notifications: Sent if permission granted');
-    
+    console.log('🔔 Browser notifications:', canUseBrowserNotifications ? 'Sent' : 'Skipped (see reasons above)');
+
     return result;
 };

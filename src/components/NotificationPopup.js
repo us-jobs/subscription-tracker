@@ -51,12 +51,13 @@ const NotificationPopup = ({ subscription, daysUntil, onClose }) => {
     <div 
       className={`
         bg-white rounded-2xl shadow-2xl overflow-hidden border-2 border-gray-100
-        transform transition-all duration-300 ease-out w-full
+        transform transition-all duration-300 ease-out w-full max-w-sm
         ${isVisible && !isExiting ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'}
         ${isExiting ? 'scale-95' : 'scale-100'}
       `}
       style={{
-        animation: isVisible && !isExiting ? 'slideInRight 0.3s ease-out, pulse 0.5s ease-in-out' : ''
+        animation: isVisible && !isExiting ? 'slideInRight 0.3s ease-out, pulse 0.5s ease-in-out' : '',
+        maxWidth: '90vw' // Ensure it fits on small screens
       }}
     >
       {/* Header with gradient */}
