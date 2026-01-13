@@ -50,7 +50,6 @@ const SubscriptionForm = ({
         { value: 'JPY', label: 'JPY (¥)' }, { value: 'CNY', label: 'CNY (¥)' }, { value: 'KRW', label: 'KRW (₩)' }
     ];
 
-    // Get today's date in YYYY-MM-DD format for min date
     const today = new Date().toISOString().split('T')[0];
 
     return (

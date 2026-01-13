@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import Header from './components/Header';
 import SummaryCards from './components/SummaryCards';
@@ -13,13 +12,13 @@ import GuidanceSections from './components/GuidanceSections';
 import NotificationSettingsModal from './components/NotificationSettingsModal';
 import AIUpgradeModal from './components/AIUpgradeModal';
 import AIErrorModal from './components/AIErrorModal';
+import NotificationPopup from './components/NotificationPopup';
 
 import { processImageWithGemini } from './utils/geminiProcessor';
-import { loadSubscriptions, saveSubscriptions, loadUserProfile, saveUserProfile } from './utils/storage';
 import { checkAndSendNotifications } from './utils/notificationService';
-import NotificationSetupModal from './components/NotificationSetupModal';
 
-import { Camera, Upload, FileText, PieChart, List, AlertTriangle, Check, X, ShieldAlert, Download } from 'lucide-react';
+import { loadSubscriptions, saveSubscriptions, loadUserProfile, saveUserProfile } from './utils/storage';
+import { Camera, Upload, FileText, PieChart, List, AlertTriangle, Check, X, ShieldAlert, Download, Bell } from 'lucide-react';
 
 const App = () => {
   // Data State
@@ -35,7 +34,7 @@ const App = () => {
   const [previewImage, setPreviewImage] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [notification, setNotification] = useState({ message: '', type: '' });
-  const [showNotificationSetup, setShowNotificationSetup] = useState(false);
+  const [notificationPopups, setNotificationPopups] = useState([]);
 
   // Modals
   const [showNamePrompt, setShowNamePrompt] = useState(false);
@@ -45,10 +44,11 @@ const App = () => {
   const [showNotificationSettings, setShowNotificationSettings] = useState(false);
   const [showAIUpgrade, setShowAIUpgrade] = useState({ show: false, mode: '' });
   const [showAIError, setShowAIError] = useState({ show: false, error: '' });
-  const [lastAIAction, setLastAIAction] = useState(''); // 'scan' | 'upload'
+  const [lastAIAction, setLastAIAction] = useState('');
   const [subToDelete, setSubToDelete] = useState(null);
 
   const fileInputRef = useRef(null);
+  const isInitialMount = useRef(true);
 
   // Load Initial Data
   useEffect(() => {
@@ -73,14 +73,11 @@ const App = () => {
       setProfile(prev => ({ ...prev, notificationsEnabled: true }));
     }
 
-    const hasSeenNotificationPrompt = localStorage.getItem('hasSeenNotificationPrompt');
-    if (!hasSeenNotificationPrompt && 'Notification' in window) {
-      // Show notification setup after a short delay (so they see the app first)
-      setTimeout(() => {
-        if (Notification.permission === 'default') {
-          setShowNotificationSetup(true);
-        }
-      }, 3000); // Show after 3 seconds
+    // Register service worker for better notification support on mobile
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {
+        console.log('Service worker registration skipped');
+      });
     }
   }, []);
 
@@ -93,19 +90,52 @@ const App = () => {
     saveUserProfile(profile);
   }, [profile]);
 
-  // Check for upcoming notifications
+  // Show in-app notification popup
+  const showNotificationPopup = (subscription, daysUntil) => {
+    const id = Date.now();
+    const newPopup = {
+      id,
+      subscription,
+      daysUntil,
+      timestamp: new Date()
+    };
+    
+    setNotificationPopups(prev => [...prev, newPopup]);
+    
+    // Auto-remove after 10 seconds
+    setTimeout(() => {
+      setNotificationPopups(prev => prev.filter(p => p.id !== id));
+    }, 10000);
+  };
+
+  const removeNotificationPopup = (id) => {
+    setNotificationPopups(prev => prev.filter(p => p.id !== id));
+  };
+
+  // Check for notifications - runs once per day
   useEffect(() => {
-    // Initial check
-    checkAndSendNotifications(subscriptions, profile);
-    
-    // Set up periodic checking every hour (3600000 ms)
-    const interval = setInterval(() => {
-      checkAndSendNotifications(subscriptions, profile);
-    }, 3600000); // Check every hour
-    
-    // Cleanup interval on unmount or when dependencies change
-    return () => clearInterval(interval);
-  }, [subscriptions, profile, profile.notificationsEnabled, profile.reminderDays]);
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+
+    if (profile.notificationsEnabled && subscriptions.length > 0) {
+      const lastCheckDate = localStorage.getItem('lastNotificationCheck');
+      const today = new Date().toDateString();
+      
+      if (lastCheckDate !== today) {
+        const result = checkAndSendNotifications(
+          subscriptions, 
+          profile, 
+          showNotificationPopup
+        );
+        
+        if (result.sent > 0) {
+          localStorage.setItem('lastNotificationCheck', today);
+        }
+      }
+    }
+  }, [profile.notificationsEnabled, profile.reminderDays]);
 
   const handleSaveSettings = (key) => {
     const cleanKey = key ? key.trim() : '';
@@ -128,7 +158,61 @@ const App = () => {
     setShowTour(true);
   };
 
-  // Handlers
+  // Test Notification Function with dual notifications
+  const handleTestNotification = () => {
+    if (!profile.notificationsEnabled) {
+      setNotification({ message: 'Please enable notifications first!', type: 'error' });
+      setTimeout(() => setNotification({ message: '', type: '' }), 3000);
+      return;
+    }
+
+    if (subscriptions.length === 0) {
+      setNotification({ message: 'Add a subscription first to test!', type: 'error' });
+      setTimeout(() => setNotification({ message: '', type: '' }), 3000);
+      return;
+    }
+
+    console.log('🧪 Testing Universal Notifications...');
+    console.log('📱 User Agent:', navigator.userAgent);
+    console.log('🔔 Notification Permission:', Notification.permission);
+    console.log('🌐 Platform:', navigator.platform);
+
+    // Clear previous notification flags
+    Object.keys(localStorage).forEach(key => {
+      if (key.startsWith('notified_')) {
+        localStorage.removeItem(key);
+      }
+    });
+
+    try {
+      const result = checkAndSendNotifications(
+        subscriptions, 
+        profile, 
+        showNotificationPopup
+      );
+      
+      console.log('📊 Test Result:', result);
+      
+      if (result.sent > 0) {
+        setNotification({ 
+          message: `✅ ${result.sent} notification(s) sent! Check in-app popup & system notifications 🔔`, 
+          type: 'success' 
+        });
+      } else {
+        setNotification({ 
+          message: `⚠️ No subscriptions match your reminder days (${profile.reminderDays.join(', ')} days)`, 
+          type: 'error' 
+        });
+      }
+      
+      setTimeout(() => setNotification({ message: '', type: '' }), 5000);
+    } catch (error) {
+      console.error('❌ Test notification error:', error);
+      setNotification({ message: `❌ Error: ${error.message}`, type: 'error' });
+      setTimeout(() => setNotification({ message: '', type: '' }), 5000);
+    }
+  };
+
   const handleSaveSubscription = (data) => {
       if (data.id) {
           setSubscriptions(prev => prev.map(s => s.id === data.id ? data : s));
@@ -137,30 +221,14 @@ const App = () => {
               ...data, 
               id: Date.now(), 
               status: 'active',
-              // Ensure the date is stored in a consistent format
               nextBillingDate: new Date(data.nextBillingDate).toISOString().split('T')[0]
           };
           setSubscriptions(prev => [...prev, newSub]);
       }
       setView('list');
       setEditingSub(null);
-
-      // Don't check notifications immediately after adding - wait 2 seconds
-      setTimeout(() => {
-          checkAndSendNotifications(subscriptions, profile);
-      }, 2000);
   };
 
-  const handleNotificationSetupComplete = () => {
-    localStorage.setItem('hasSeenNotificationPrompt', 'true');
-    setProfile(prev => ({ ...prev, notificationsEnabled: true }));
-    setShowNotificationSetup(false);
-  };
-
-  const handleNotificationSetupClose = () => {
-    localStorage.setItem('hasSeenNotificationPrompt', 'true');
-    setShowNotificationSetup(false);
-  };
   const handleDeleteSubscription = (id) => {
     setSubToDelete(id);
     setShowDeleteConfirm(true);
@@ -218,7 +286,6 @@ const App = () => {
         console.log('Using Gemini AI...');
         extracted = await processImageWithGemini(blob, apiKey);
       } else {
-        // Fallback removed as per user request
         setIsProcessing(false);
         return;
       }
@@ -243,7 +310,6 @@ const App = () => {
       console.error(err);
       let message = err.message || 'Scan failed. Please try again.';
 
-      // Auto-remove invalid keys logic
       if (message.includes('INVALID_KEY') || message.includes('404')) {
         setApiKey('');
         localStorage.removeItem('geminiApiKey');
@@ -285,84 +351,48 @@ const App = () => {
 
   const handleRequestNotifications = async () => {
     if (!('Notification' in window)) {
-      setNotification({ message: 'Notifications not supported in this browser', type: 'error' });
+      setNotification({ message: 'Notifications not supported on this device', type: 'error' });
       setTimeout(() => setNotification({ message: '', type: '' }), 3000);
       return;
     }
 
-    // If permission already granted, just show settings to tweak days
     if (Notification.permission === 'granted') {
       setShowNotificationSettings(true);
       return;
     }
 
-    // If permission was previously denied, show helpful message
-    if (Notification.permission === 'denied') {
-      setNotification({ 
-        message: 'Notifications were blocked. Please enable them in your browser settings (click the lock icon in the address bar).', 
-        type: 'error' 
-      });
-      setTimeout(() => setNotification({ message: '', type: '' }), 5000);
-      return;
-    }
-
-    // Permission is 'default', request it
     const permission = await Notification.requestPermission();
     if (permission === 'granted') {
       setShowNotificationSettings(true);
-    } else if (permission === 'denied') {
-      setNotification({ 
-        message: 'Notification permission denied. Please enable in browser settings (click the lock icon in the address bar).', 
-        type: 'error' 
-      });
-      setTimeout(() => setNotification({ message: '', type: '' }), 5000);
+    } else {
+      setNotification({ message: 'Notification permission denied', type: 'error' });
+      setTimeout(() => setNotification({ message: '', type: '' }), 3000);
     }
   };
 
-  const handleSaveNotificationSettings = async (days) => {
-    if (!('Notification' in window)) {
-      setNotification({ message: 'Notifications not supported in this browser', type: 'error' });
-      setTimeout(() => setNotification({ message: '', type: '' }), 3000);
-      return;
-    }
-
-    let permission = Notification.permission;
-    
-    // If permission was previously denied, we can't request it again
-    if (permission === 'denied') {
-      setNotification({ 
-        message: 'Notifications were blocked. Please enable them in browser settings (click the lock icon in the address bar), then refresh the page.', 
-        type: 'error' 
-      });
-      setTimeout(() => setNotification({ message: '', type: '' }), 5000);
-      return;
-    }
-
-    // If permission is not granted, request it
-    if (permission !== 'granted') {
-      permission = await Notification.requestPermission();
-    }
-
-    if (permission === 'granted') {
-      setProfile(prev => ({ ...prev, notificationsEnabled: true, reminderDays: days }));
-      setShowNotificationSettings(false);
-      setNotification({ message: 'Notification settings updated!', type: 'success' });
-      setTimeout(() => setNotification({ message: '', type: '' }), 3000);
-
-      // Trigger an immediate check so they see it working if they have a due sub
-      checkAndSendNotifications(subscriptions, { ...profile, notificationsEnabled: true, reminderDays: days });
-    } else {
-      setNotification({ 
-        message: 'Notification permission denied. Please enable in browser settings (click the lock icon in the address bar), then refresh the page.', 
-        type: 'error' 
-      });
-      setTimeout(() => setNotification({ message: '', type: '' }), 5000);
-    }
+  const handleSaveNotificationSettings = (days) => {
+    setProfile(prev => ({ ...prev, notificationsEnabled: true, reminderDays: days }));
+    setShowNotificationSettings(false);
+    setNotification({ message: 'Notification settings updated!', type: 'success' });
+    setTimeout(() => setNotification({ message: '', type: '' }), 3000);
+    localStorage.removeItem('lastNotificationCheck');
   };
 
   return (
     <div className="min-h-screen bg-gray-50 p-2 sm:p-4 font-sans text-gray-900">
       <div className="max-w-2xl mx-auto">
+
+        {/* Notification Popups */}
+        <div className="fixed top-20 right-4 z-[200] space-y-3 max-w-sm">
+          {notificationPopups.map(popup => (
+            <NotificationPopup
+              key={popup.id}
+              subscription={popup.subscription}
+              daysUntil={popup.daysUntil}
+              onClose={() => removeNotificationPopup(popup.id)}
+            />
+          ))}
+        </div>
 
         {showNamePrompt && (
           <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
@@ -495,6 +525,22 @@ const App = () => {
         {(view === 'list' || view === 'analytics') && (
           <>
             <SummaryCards totals={calculateTotals()} count={subscriptions.length} />
+            
+            {profile.notificationsEnabled && subscriptions.length > 0 && view === 'list' && (
+              <div className="mb-4">
+                <button
+                  onClick={handleTestNotification}
+                  className="w-full bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white font-semibold py-3 px-4 rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all transform hover:scale-105"
+                >
+                  <Bell size={20} className="animate-pulse" />
+                  🧪 Test Notifications Now
+                </button>
+                <p className="text-xs text-gray-500 text-center mt-2">
+                  Tests both in-app popup + browser/system notifications
+                </p>
+              </div>
+            )}
+
             <div className="flex justify-center mb-6">
               <div className="bg-gray-200 p-1 rounded-xl inline-flex shadow-inner">
                 <button onClick={() => setView('list')} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${view === 'list' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
@@ -561,12 +607,6 @@ const App = () => {
           </div>
         )}
       </div>
-      {showNotificationSetup && (
-        <NotificationSetupModal
-          onClose={handleNotificationSetupClose}
-          onSuccess={handleNotificationSetupComplete}
-        />
-      )}
     </div>
   );
 };
