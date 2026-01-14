@@ -17,7 +17,7 @@ import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
 
 import { processImageWithGemini } from './utils/geminiProcessor';
-import { checkAndSendNotifications } from './utils/notificationService';
+import { checkAndSendNotifications, sendTestNotification } from './utils/notificationService';
 
 import { loadSubscriptions, saveSubscriptions, loadUserProfile, saveUserProfile } from './utils/storage';
 import { Camera, Upload, FileText, PieChart, List, AlertTriangle, Check, X, ShieldAlert, Download, Bell } from 'lucide-react';
@@ -53,7 +53,7 @@ const App = () => {
   const fileInputRef = useRef(null);
   const isInitialMount = useRef(true);
 
-useEffect(() => {
+  useEffect(() => {
     // Initialize UI based on loaded profile
     if (profile.name) {
       setTempName(profile.name);
@@ -70,7 +70,7 @@ useEffect(() => {
     // Check notification permission (works for both native and web)
     const checkNotificationPermission = async () => {
       const isNative = Capacitor.isNativePlatform();
-      
+
       if (isNative) {
         try {
           const permStatus = await LocalNotifications.checkPermissions();
@@ -86,7 +86,7 @@ useEffect(() => {
         }
       }
     };
-    
+
     checkNotificationPermission();
 
     // Service worker is only needed for web, not native
@@ -101,7 +101,7 @@ useEffect(() => {
           });
       });
     }
-}, []);
+  }, []);
 
   // Save Data
   useEffect(() => {
@@ -181,90 +181,36 @@ useEffect(() => {
   };
 
   // Test Notification Function with dual notifications
-  const handleTestNotification = () => {
-        alert('Button clicked! Notifications: ' + profile.notificationsEnabled + ', Subs: ' + subscriptions.length);
+  const handleTestNotification = async () => {
+    setNotification({ message: 'Sending test notification...', type: 'info' });
 
-        console.log('🔍 === BUTTON CLICKED ===');
-    console.log('profile.notificationsEnabled:', profile.notificationsEnabled);
-    console.log('subscriptions.length:', subscriptions.length);
-    console.log('Is Native Platform:', Capacitor.isNativePlatform());
-    if (!profile.notificationsEnabled) {
-      setNotification({ message: 'Please enable notifications first!', type: 'error' });
-      setTimeout(() => setNotification({ message: '', type: '' }), 3000);
-      return;
-    }
+    const result = await sendTestNotification();
 
-    if (subscriptions.length === 0) {
-      setNotification({ message: 'Add a subscription first to test!', type: 'error' });
-      setTimeout(() => setNotification({ message: '', type: '' }), 3000);
-      return;
-    }
+    if (result.success) {
+      setNotification({
+        message: `✅ Test notification sent! Check your ${result.method === 'native' ? 'notification shade' : 'notification center'}.`,
+        type: 'success'
+      });
+    } else {
+      setNotification({
+        message: `❌ Failed: ${result.error}. Please check settings.`,
+        type: 'error'
+      });
 
-    // Detailed mobile debugging
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    const isAndroid = /Android/i.test(navigator.userAgent);
-    const isChrome = /Chrome/i.test(navigator.userAgent);
-
-    console.log('🧪 === MOBILE NOTIFICATION DEBUG ===');
-    console.log('📱 Device Type:', isMobile ? 'MOBILE' : 'DESKTOP');
-    console.log('🤖 Android:', isAndroid);
-    console.log('🌐 Chrome:', isChrome);
-    console.log('📱 User Agent:', navigator.userAgent);
-    console.log('🔔 Notification Support:', 'Notification' in window);
-    console.log('🔐 Permission:', Notification.permission);
-    console.log('👤 Profile:', profile);
-    console.log('📦 Subscriptions:', subscriptions.length);
-    console.log('📅 Reminder Days:', profile.reminderDays);
-
-    // Clear previous notification flags
-    Object.keys(localStorage).forEach(key => {
-      if (key.startsWith('notified_')) {
-        localStorage.removeItem(key);
+      // If permission denied, show settings helper
+      if (result.error.includes('Permission denied') || result.error.includes('denied')) {
+        setTimeout(() => {
+          if (window.confirm("Notifications are blocked. Open settings to enable?")) {
+            setShowNotificationSettings(true);
+          }
+        }, 1000);
       }
-    });
-
-    try {
-      console.log('🚀 Starting notification test...');
-
-      const result = checkAndSendNotifications(
-        subscriptions,
-        profile,
-        showNotificationPopup
-      );
-
-      console.log('📊 === TEST RESULT ===');
-      console.log('✅ Sent:', result.sent);
-      console.log('⏭️ Skipped:', result.skipped);
-      console.log('❌ Errors:', result.errors);
-
-      if (result.sent > 0) {
-        setNotification({
-          message: `✅ ${result.sent} notification(s) sent! ${isMobile ? 'Check popup above & notification shade' : 'Check popup & notification center'}`,
-          type: 'success'
-        });
-      } else if (result.skipped > 0) {
-        setNotification({
-          message: `⚠️ No subscriptions match your reminder days (${profile.reminderDays.join(', ')} days)`,
-          type: 'error'
-        });
-      } else {
-        setNotification({
-          message: '⚠️ No notifications sent. Check console for details.',
-          type: 'error'
-        });
-      }
-
-      setTimeout(() => setNotification({ message: '', type: '' }), 5000);
-    } catch (error) {
-      console.error('❌ === TEST ERROR ===');
-      console.error('Error:', error);
-      console.error('Stack:', error.stack);
-      setNotification({ message: `❌ Error: ${error.message}`, type: 'error' });
-      setTimeout(() => setNotification({ message: '', type: '' }), 5000);
     }
+
+    setTimeout(() => setNotification({ message: '', type: '' }), 5000);
   };
 
-const handleSaveSubscription = async (data) => {
+  const handleSaveSubscription = async (data) => {
     if (data.id) {
       setSubscriptions(prev => prev.map(s => s.id === data.id ? data : s));
       setView('list');
@@ -287,6 +233,15 @@ const handleSaveSubscription = async (data) => {
 
       if (!hasPermission) {
         console.log('🚫 Permission missing, blocking save...');
+
+        // If explicitly denied, we need to tell user to go to settings
+        const isDenied = (!isNative && Notification.permission === 'denied');
+
+        if (isDenied) {
+          alert('⚠️ Notifications are blocked! Please enable them in your browser/device settings to save subscriptions.');
+          return; // Stop here, don't even open inner modal as it can't fix "denied" state
+        }
+
         setProfile(prev => ({ ...prev, notificationsEnabled: false }));
         setPendingSubscription(data);
         setShowNotificationSettings(true);
@@ -303,7 +258,7 @@ const handleSaveSubscription = async (data) => {
       setView('list');
       setEditingSub(null);
     }
-};
+  };
 
   const handleDeleteSubscription = (id) => {
     setSubToDelete(id);
@@ -425,125 +380,125 @@ const handleSaveSubscription = async (data) => {
     return { monthly: monthly.toFixed(2), yearly: (monthly * 12).toFixed(2) };
   };
 
-// Replace the handleRequestNotifications function with this:
-const handleRequestNotifications = async () => {
+  // Replace the handleRequestNotifications function with this:
+  const handleRequestNotifications = async () => {
     const isNative = Capacitor.isNativePlatform();
 
     if (isNative) {
-        // Use Capacitor for native platforms
-        try {
-            const permStatus = await LocalNotifications.checkPermissions();
-            
-            if (permStatus.display === 'granted') {
-                setShowNotificationSettings(true);
-                return;
-            }
+      // Use Capacitor for native platforms
+      try {
+        const permStatus = await LocalNotifications.checkPermissions();
 
-            const permResult = await LocalNotifications.requestPermissions();
-            
-            if (permResult.display === 'granted') {
-                setShowNotificationSettings(true);
-            } else {
-                setNotification({ message: 'Notification permission denied', type: 'error' });
-                setTimeout(() => setNotification({ message: '', type: '' }), 3000);
-            }
-        } catch (error) {
-            console.error('Failed to request permissions:', error);
-            setNotification({ message: 'Failed to enable notifications', type: 'error' });
-            setTimeout(() => setNotification({ message: '', type: '' }), 3000);
-        }
-    } else {
-        // Use Web Notifications API for browser
-        if (!('Notification' in window)) {
-            setNotification({ message: 'Notifications not supported on this device', type: 'error' });
-            setTimeout(() => setNotification({ message: '', type: '' }), 3000);
-            return;
+        if (permStatus.display === 'granted') {
+          setShowNotificationSettings(true);
+          return;
         }
 
-        if (Notification.permission === 'granted') {
-            setShowNotificationSettings(true);
-            return;
-        }
+        const permResult = await LocalNotifications.requestPermissions();
 
-        const permission = await Notification.requestPermission();
-        if (permission === 'granted') {
-            setShowNotificationSettings(true);
+        if (permResult.display === 'granted') {
+          setShowNotificationSettings(true);
         } else {
-            setNotification({ message: 'Notification permission denied', type: 'error' });
-            setTimeout(() => setNotification({ message: '', type: '' }), 3000);
+          setNotification({ message: 'Notification permission denied', type: 'error' });
+          setTimeout(() => setNotification({ message: '', type: '' }), 3000);
         }
-    }
-};
+      } catch (error) {
+        console.error('Failed to request permissions:', error);
+        setNotification({ message: 'Failed to enable notifications', type: 'error' });
+        setTimeout(() => setNotification({ message: '', type: '' }), 3000);
+      }
+    } else {
+      // Use Web Notifications API for browser
+      if (!('Notification' in window)) {
+        setNotification({ message: 'Notifications not supported on this device', type: 'error' });
+        setTimeout(() => setNotification({ message: '', type: '' }), 3000);
+        return;
+      }
 
-// Replace the handleSaveNotificationSettings function with this:
-const handleSaveNotificationSettings = async (days) => {
+      if (Notification.permission === 'granted') {
+        setShowNotificationSettings(true);
+        return;
+      }
+
+      const permission = await Notification.requestPermission();
+      if (permission === 'granted') {
+        setShowNotificationSettings(true);
+      } else {
+        setNotification({ message: 'Notification permission denied', type: 'error' });
+        setTimeout(() => setNotification({ message: '', type: '' }), 3000);
+      }
+    }
+  };
+
+  // Replace the handleSaveNotificationSettings function with this:
+  const handleSaveNotificationSettings = async (days) => {
     console.log('💾 handleSaveNotificationSettings called', { pending: !!pendingSubscription });
     const isNative = Capacitor.isNativePlatform();
 
     // Request permission if not granted yet
     if (isNative) {
-        try {
-            const permStatus = await LocalNotifications.checkPermissions();
-            
-            if (permStatus.display !== 'granted') {
-                const permResult = await LocalNotifications.requestPermissions();
-                
-                if (permResult.display !== 'granted') {
-                    if (pendingSubscription) {
-                        setNotification({ message: 'Notifications must be allowed to add a subscription', type: 'error' });
-                    } else {
-                        setNotification({ message: 'Notification permission denied', type: 'error' });
-                    }
-                    setTimeout(() => setNotification({ message: '', type: '' }), 3000);
-                    return;
-                }
+      try {
+        const permStatus = await LocalNotifications.checkPermissions();
+
+        if (permStatus.display !== 'granted') {
+          const permResult = await LocalNotifications.requestPermissions();
+
+          if (permResult.display !== 'granted') {
+            if (pendingSubscription) {
+              setNotification({ message: 'Notifications must be allowed to add a subscription', type: 'error' });
+            } else {
+              setNotification({ message: 'Notification permission denied', type: 'error' });
             }
-        } catch (error) {
-            console.error('❌ Permission request failed:', error);
-            setNotification({ message: 'Failed to enable notifications', type: 'error' });
             setTimeout(() => setNotification({ message: '', type: '' }), 3000);
             return;
+          }
         }
+      } catch (error) {
+        console.error('❌ Permission request failed:', error);
+        setNotification({ message: 'Failed to enable notifications', type: 'error' });
+        setTimeout(() => setNotification({ message: '', type: '' }), 3000);
+        return;
+      }
     } else {
-        // Browser permission check
-        if ('Notification' in window && Notification.permission !== 'granted') {
-            const permission = await Notification.requestPermission();
-            
-            if (permission !== 'granted') {
-                if (pendingSubscription) {
-                    setNotification({ message: 'Notifications must be allowed to add a subscription', type: 'error' });
-                } else {
-                    setNotification({ message: 'Notification permission denied', type: 'error' });
-                }
-                setTimeout(() => setNotification({ message: '', type: '' }), 3000);
-                return;
-            }
+      // Browser permission check
+      if ('Notification' in window && Notification.permission !== 'granted') {
+        const permission = await Notification.requestPermission();
+
+        if (permission !== 'granted') {
+          if (pendingSubscription) {
+            setNotification({ message: 'Notifications must be allowed to add a subscription', type: 'error' });
+          } else {
+            setNotification({ message: 'Notification permission denied', type: 'error' });
+          }
+          setTimeout(() => setNotification({ message: '', type: '' }), 3000);
+          return;
         }
+      }
     }
 
     setProfile(prev => ({ ...prev, notificationsEnabled: true, reminderDays: days }));
 
     // Process pending subscription if exists
     if (pendingSubscription) {
-        const newSub = {
-            ...pendingSubscription,
-            id: Date.now(),
-            status: 'active',
-            nextBillingDate: new Date(pendingSubscription.nextBillingDate).toISOString().split('T')[0]
-        };
-        setSubscriptions(prev => [...prev, newSub]);
-        setPendingSubscription(null);
-        setView('list');
-        setEditingSub(null);
-        setNotification({ message: 'Subscription added & notifications enabled!', type: 'success' });
+      const newSub = {
+        ...pendingSubscription,
+        id: Date.now(),
+        status: 'active',
+        nextBillingDate: new Date(pendingSubscription.nextBillingDate).toISOString().split('T')[0]
+      };
+      setSubscriptions(prev => [...prev, newSub]);
+      setPendingSubscription(null);
+      setView('list');
+      setEditingSub(null);
+      setNotification({ message: 'Subscription added & notifications enabled!', type: 'success' });
     } else {
-        setNotification({ message: 'Notification settings updated!', type: 'success' });
+      setNotification({ message: 'Notification settings updated!', type: 'success' });
     }
 
     setShowNotificationSettings(false);
     setTimeout(() => setNotification({ message: '', type: '' }), 3000);
     localStorage.removeItem('lastNotificationCheck');
-};
+  };
 
   const handleCloseNotificationSettings = () => {
     if (pendingSubscription) {

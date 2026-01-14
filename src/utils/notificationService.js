@@ -16,11 +16,11 @@ export const checkAndSendNotifications = async (
 
     const today = new Date();
     const todayNormalized = new Date(today.getFullYear(), today.getMonth(), today.getDate());
- 
+
     // Check if running on native platform (Android/iOS)
     const isNativePlatform = Capacitor.isNativePlatform();
-    const canUseBrowserNotifications = !isNativePlatform && 
-        NotificationAPI && 
+    const canUseBrowserNotifications = !isNativePlatform &&
+        NotificationAPI &&
         NotificationAPI.permission === 'granted';
 
     let sentCount = 0;
@@ -38,11 +38,11 @@ export const checkAndSendNotifications = async (
         try {
             const permStatus = await LocalNotifications.checkPermissions();
             console.log('📱 Native permission status:', permStatus);
-            
+
             if (permStatus.display !== 'granted') {
                 const permResult = await LocalNotifications.requestPermissions();
                 console.log('📱 Native permission result:', permResult);
-                
+
                 if (permResult.display !== 'granted') {
                     console.error('❌ Native notification permission denied');
                     return { sent: 0, skipped: 0, errors: [{ type: 'permission', error: 'Permission denied' }] };
@@ -188,4 +188,61 @@ export const checkAndSendNotifications = async (
     console.log('📊 Result:', result);
 
     return result;
+};
+
+export const sendTestNotification = async () => {
+    const isNativePlatform = Capacitor.isNativePlatform();
+    const notificationTitle = '🔔 Test Notification';
+    const notificationBody = 'Success! Notifications are working correctly on your device.';
+
+    try {
+        if (isNativePlatform) {
+            // Check permission first
+            const permStatus = await LocalNotifications.checkPermissions();
+            if (permStatus.display !== 'granted') {
+                const permResult = await LocalNotifications.requestPermissions();
+                if (permResult.display !== 'granted') {
+                    throw new Error('Permission denied');
+                }
+            }
+
+            await LocalNotifications.schedule({
+                notifications: [{
+                    title: notificationTitle,
+                    body: notificationBody,
+                    id: Date.now(),
+                    schedule: { at: new Date(Date.now() + 1000) }, // 1 second delay
+                    sound: undefined,
+                    attachments: undefined,
+                    actionTypeId: "",
+                    extra: null
+                }]
+            });
+            return { success: true, method: 'native' };
+        } else {
+            // Web Notification
+            if (!('Notification' in window)) {
+                throw new Error('Not supported');
+            }
+
+            if (Notification.permission !== 'granted') {
+                const permission = await Notification.requestPermission();
+                if (permission !== 'granted') {
+                    throw new Error('Permission denied');
+                }
+            }
+
+            const notification = new Notification(notificationTitle, {
+                body: notificationBody,
+                icon: '/logo192.png',
+                badge: '/logo192.png',
+                requireInteraction: false
+            });
+
+            return { success: true, method: 'web' };
+        }
+    } catch (error) {
+        console.error('Test notification failed:', error);
+        return { success: false, error: error.message };
+    }
 };

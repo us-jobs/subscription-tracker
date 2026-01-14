@@ -41,9 +41,9 @@ const NotificationSettingsModal = ({ onClose, onSave, currentDays, isEnabling })
                         <Bell size={32} />
                     </div>
                     <h2 className="text-xl font-bold">
-                        {isEnabling ? 'Enable Notifications' : 'Reminder Preferences'}
+                        {isEnabling ? 'Enable Notifications to Continue' : 'Reminder Preferences'}
                     </h2>
-                    <p className="text-indigo-100 text-sm mt-1">When should we remind you?, before <br></br> 1 day, 3 days.. Select from below</p>
+                    <p className="text-indigo-100 text-sm mt-1">To ensure you never miss a payment, notifications are required. Please select your reminder preference below.</p>
                 </div>
 
                 <div className="p-6">
@@ -57,8 +57,8 @@ const NotificationSettingsModal = ({ onClose, onSave, currentDays, isEnabling })
                                 key={day}
                                 onClick={() => toggleDay(day)}
                                 className={`py-2 rounded-xl text-xs font-semibold transition ${selectedDays.includes(day)
-                                        ? 'bg-indigo-600 text-white shadow-md'
-                                        : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+                                    ? 'bg-indigo-600 text-white shadow-md'
+                                    : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
                                     }`}
                             >
                                 {day} {day === 1 ? 'day' : 'days'}
