@@ -44,6 +44,7 @@ const App = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [showTour, setShowTour] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [showNotificationSettings, setShowNotificationSettings] = useState(false);
   const [showAIUpgrade, setShowAIUpgrade] = useState({ show: false, mode: '' });
   const [showAIError, setShowAIError] = useState({ show: false, error: '' });
@@ -294,11 +295,17 @@ const App = () => {
     setShowDeleteConfirm(true);
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (subToDelete) {
+      setIsDeleting(true);
+      // Simulate deleting for better UX
+      await new Promise(r => setTimeout(r, 600));
+
       setSubscriptions(prev => prev.filter(s => s.id !== subToDelete));
       setSubToDelete(null);
       setShowDeleteConfirm(false);
+      setIsDeleting(false);
+
       setNotification({ message: 'Subscription deleted', type: 'success' });
       setTimeout(() => setNotification({ message: '', type: '' }), 3000);
     }
@@ -614,8 +621,15 @@ const App = () => {
                 Are you sure you want to remove this subscription? This action cannot be undone.
               </p>
               <div className="flex gap-3">
-                <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-medium transition">Cancel</button>
-                <button onClick={confirmDelete} className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium transition">Yes, Delete</button>
+                <button onClick={() => setShowDeleteConfirm(false)} disabled={isDeleting} className="flex-1 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-medium transition disabled:text-gray-400">Cancel</button>
+                <button
+                  onClick={confirmDelete}
+                  disabled={isDeleting}
+                  className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium transition flex items-center justify-center gap-2 disabled:bg-red-400"
+                >
+                  {isDeleting ? <Loader2 size={18} className="animate-spin" /> : null}
+                  {isDeleting ? 'Deleting...' : 'Yes, Delete'}
+                </button>
               </div>
             </div>
           </div>
