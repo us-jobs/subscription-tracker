@@ -6,6 +6,7 @@ export const checkAndSendNotifications = async (
     profile,
     showInAppPopup = null,
     forceCheck = false,
+    targetSubscriptionId = null,
     NotificationAPI = window.Notification,
     StorageAPI = localStorage
 ) => {
@@ -58,6 +59,11 @@ export const checkAndSendNotifications = async (
     const notificationsToSchedule = [];
 
     subscriptions.forEach(sub => {
+        // If targetSubscriptionId is provided, ONLY process that specific subscription
+        if (targetSubscriptionId && sub.id !== targetSubscriptionId) {
+            return;
+        }
+
         if (!sub.nextBillingDate) {
             console.log(`⏭️ Skipping ${sub.name} - no billing date`);
             return;
@@ -250,5 +256,42 @@ export const sendTestNotification = async () => {
     } catch (error) {
         console.error('Test notification failed:', error);
         return { success: false, error: error.message };
+    }
+};
+
+export const sendCustomNotification = async (title, body) => {
+    const isNativePlatform = Capacitor.isNativePlatform();
+
+    try {
+        if (isNativePlatform) {
+            const permStatus = await LocalNotifications.checkPermissions();
+            if (permStatus.display !== 'granted') return false;
+
+            await LocalNotifications.schedule({
+                notifications: [{
+                    title: title,
+                    body: body,
+                    id: Math.floor(Date.now() % 2147483647),
+                    schedule: { at: new Date(Date.now() + 1000) },
+                    sound: undefined,
+                    attachments: undefined,
+                    actionTypeId: "",
+                    extra: null
+                }]
+            });
+            return true;
+        } else {
+            if (!('Notification' in window) || Notification.permission !== 'granted') return false;
+
+            new Notification(title, {
+                body: body,
+                icon: '/logo192.png',
+                requireInteraction: false
+            });
+            return true;
+        }
+    } catch (e) {
+        console.error('Custom notification failed:', e);
+        return false;
     }
 };

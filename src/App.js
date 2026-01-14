@@ -13,6 +13,7 @@ import NotificationSettingsModal from './components/NotificationSettingsModal';
 import AIUpgradeModal from './components/AIUpgradeModal';
 import AIErrorModal from './components/AIErrorModal';
 import NotificationPopup from './components/NotificationPopup';
+import SubscriptionSavedModal from './components/SubscriptionSavedModal';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
 
@@ -49,6 +50,7 @@ const App = () => {
   const [lastAIAction, setLastAIAction] = useState('');
   const [subToDelete, setSubToDelete] = useState(null);
   const [pendingSubscription, setPendingSubscription] = useState(null);
+  const [showSavedModal, setShowSavedModal] = useState(null); // { sub: object, reminderDays: [] }
 
   const fileInputRef = useRef(null);
   const isInitialMount = useRef(true);
@@ -267,12 +269,17 @@ const App = () => {
       setSubscriptions(prev => {
         const updated = [...prev, newSub];
 
+
         // IMMEDIATE NOTIFICATION CHECK for the new item
-        // We do this in a timeout to ensure state/localstorage is settled? 
-        // Actually, we can just pass the new list directly.
-        setTimeout(() => {
+        // Check ONLY the new subscription. If it notifies, great. If not, show the manual confirmation modal.
+        setTimeout(async () => {
           console.log('🔄 Triggering immediate notification check for new subscription...');
-          checkAndSendNotifications(updated, profile, showNotificationPopup, true); // Force check
+          const result = await checkAndSendNotifications(updated, profile, showNotificationPopup, true, newSub.id);
+
+          // If no notification was sent (e.g. because it's due next month and not today), show the "Saved" modal
+          if (result.sent === 0) {
+            setShowSavedModal({ sub: newSub, reminderDays: profile.reminderDays });
+          }
         }, 500);
 
         return updated;
@@ -663,6 +670,14 @@ const App = () => {
         )}
 
         {showTour && <TourGuide onComplete={handleCompleteTour} />}
+
+        {showSavedModal && (
+          <SubscriptionSavedModal
+            subscription={showSavedModal.sub}
+            reminderDays={showSavedModal.reminderDays}
+            onClose={() => setShowSavedModal(null)}
+          />
+        )}
 
         {view === 'camera' && (
           <CameraCapture onCapture={handleCameraCapture} onCancel={() => setView('list')} />
