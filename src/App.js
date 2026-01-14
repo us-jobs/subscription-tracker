@@ -212,7 +212,17 @@ const App = () => {
 
   const handleSaveSubscription = async (data) => {
     if (data.id) {
-      setSubscriptions(prev => prev.map(s => s.id === data.id ? data : s));
+      setSubscriptions(prev => {
+        const updated = prev.map(s => s.id === data.id ? data : s);
+
+        // IMMEDIATE NOTIFICATION CHECK for edited item
+        setTimeout(() => {
+          console.log('🔄 Triggering immediate notification check for edited subscription...');
+          checkAndSendNotifications(updated, profile, showNotificationPopup, true); // Force check
+        }, 500);
+
+        return updated;
+      });
       setView('list');
       setEditingSub(null);
     } else {
@@ -254,7 +264,19 @@ const App = () => {
         status: 'active',
         nextBillingDate: new Date(data.nextBillingDate).toISOString().split('T')[0]
       };
-      setSubscriptions(prev => [...prev, newSub]);
+      setSubscriptions(prev => {
+        const updated = [...prev, newSub];
+
+        // IMMEDIATE NOTIFICATION CHECK for the new item
+        // We do this in a timeout to ensure state/localstorage is settled? 
+        // Actually, we can just pass the new list directly.
+        setTimeout(() => {
+          console.log('🔄 Triggering immediate notification check for new subscription...');
+          checkAndSendNotifications(updated, profile, showNotificationPopup, true); // Force check
+        }, 500);
+
+        return updated;
+      });
       setView('list');
       setEditingSub(null);
     }

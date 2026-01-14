@@ -7,7 +7,7 @@ const NotificationSettingsModal = ({ onClose, onSave, currentDays, isEnabling })
     const [customDay, setCustomDay] = useState('');
     const [showCustom, setShowCustom] = useState(false);
 
-    const options = [1, 3, 5, 7, 14, 30];
+    const options = [0, 1, 3, 5, 7, 14, 30];
 
     const toggleDay = (day) => {
         if (selectedDays.includes(day)) {
@@ -61,7 +61,7 @@ const NotificationSettingsModal = ({ onClose, onSave, currentDays, isEnabling })
                                     : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
                                     }`}
                             >
-                                {day} {day === 1 ? 'day' : 'days'}
+                                {day === 0 ? 'Same Day' : day === 1 ? '1 day' : `${day} days`}
                             </button>
                         ))}
                     </div>

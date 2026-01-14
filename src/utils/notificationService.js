@@ -5,6 +5,7 @@ export const checkAndSendNotifications = async (
     subscriptions,
     profile,
     showInAppPopup = null,
+    forceCheck = false,
     NotificationAPI = window.Notification,
     StorageAPI = localStorage
 ) => {
@@ -62,23 +63,28 @@ export const checkAndSendNotifications = async (
             return;
         }
 
-        const nextDate = new Date(sub.nextBillingDate);
-        const nextDateNormalized = new Date(nextDate.getFullYear(), nextDate.getMonth(), nextDate.getDate());
+        // Parse strictly as local date (YYYY-MM-DD) to avoid UTC offsets
+        const [y, m, d] = sub.nextBillingDate.split('-').map(Number);
+        const nextDateNormalized = new Date(y, m - 1, d); // Month is 0-indexed in JS Date
 
         const diffTime = nextDateNormalized - todayNormalized;
         const daysUntil = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
+        // Logic: Notify if in reminder list OR (it is today AND we are forcing a check e.g. on save)
+        const shouldNotify = profile.reminderDays.includes(daysUntil) || (forceCheck && daysUntil === 0);
+
         console.log(`📊 ${sub.name}:`, {
             nextBillingDate: sub.nextBillingDate,
             daysUntil: daysUntil,
-            shouldNotify: profile.reminderDays.includes(daysUntil)
+            shouldNotify: shouldNotify,
+            forced: forceCheck && daysUntil === 0
         });
 
-        // Send reminder if sub is due within reminder days
-        if (profile.reminderDays.includes(daysUntil)) {
+        // Send reminder if sub is due within reminder days OR forced Today
+        if (shouldNotify) {
             const lastNotifiedKey = `notified_${sub.id}_${daysUntil}`;
 
-            if (StorageAPI.getItem(lastNotifiedKey) !== 'true') {
+            if (forceCheck || StorageAPI.getItem(lastNotifiedKey) !== 'true') {
                 let notificationSent = false;
 
                 // 1. IN-APP POPUP (Works everywhere)
@@ -103,7 +109,7 @@ export const checkAndSendNotifications = async (
                     notificationsToSchedule.push({
                         title: notificationTitle,
                         body: notificationBody,
-                        id: Date.now() + Math.random(), // Unique ID
+                        id: Math.floor(Date.now() % 2147483647), // Safe 32-bit integer
                         schedule: { at: new Date(Date.now() + 1000) }, // Schedule 1 second from now
                         sound: undefined,
                         attachments: undefined,
@@ -210,7 +216,7 @@ export const sendTestNotification = async () => {
                 notifications: [{
                     title: notificationTitle,
                     body: notificationBody,
-                    id: Date.now(),
+                    id: Math.floor(Date.now() % 2147483647),
                     schedule: { at: new Date(Date.now() + 1000) }, // 1 second delay
                     sound: undefined,
                     attachments: undefined,
