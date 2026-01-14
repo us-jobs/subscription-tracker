@@ -1,0 +1,48 @@
+buildscript {
+    ext {
+        kotlin_version = '1.9.0'
+    }
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.13.2'
+        classpath 'com.google.gms:google-services:4.4.0'
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+    }
+}
+
+apply from: "variables.gradle"
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+        maven { url "https://www.jitpack.io" }
+    }
+}
+// Add this after the allprojects block
+subprojects {
+    configurations.all {
+        resolutionStrategy {
+            // Force all Kotlin dependencies to use the same version
+            force 'org.jetbrains.kotlin:kotlin-stdlib:1.9.0'
+            force 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.0'
+            force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.0'
+        }
+    }
+}
+
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}
+
+// Remove or comment out this configurations block for now
+// configurations.all {
+//     resolutionStrategy {
+//         force 'org.jetbrains.kotlin:kotlin-stdlib:1.9.0'
+//         force 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.0'
+//         force 'org.jetbrains.kotlin:ktlint:1.9.0'
+//     }
+// }

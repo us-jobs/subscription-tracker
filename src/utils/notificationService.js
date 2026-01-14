@@ -1,4 +1,7 @@
-export const checkAndSendNotifications = (
+import { LocalNotifications } from '@capacitor/local-notifications';
+import { Capacitor } from '@capacitor/core';
+
+export const checkAndSendNotifications = async (
     subscriptions,
     profile,
     showInAppPopup = null,
@@ -14,15 +17,11 @@ export const checkAndSendNotifications = (
     const today = new Date();
     const todayNormalized = new Date(today.getFullYear(), today.getMonth(), today.getDate());
  
-    // Mobile detection
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-    const isAndroid = /Android/i.test(navigator.userAgent);
-    const isInStandaloneMode = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
-
-    const canUseBrowserNotifications = NotificationAPI &&
-        NotificationAPI.permission === 'granted' &&
-        !(isIOS && !isInStandaloneMode);
+    // Check if running on native platform (Android/iOS)
+    const isNativePlatform = Capacitor.isNativePlatform();
+    const canUseBrowserNotifications = !isNativePlatform && 
+        NotificationAPI && 
+        NotificationAPI.permission === 'granted';
 
     let sentCount = 0;
     let skippedCount = 0;
@@ -31,15 +30,31 @@ export const checkAndSendNotifications = (
     console.log('🔔 === NOTIFICATION CHECK START ===');
     console.log('📅 Today:', todayNormalized.toDateString());
     console.log('⚙️ Reminder days:', profile.reminderDays);
-    console.log('📱 Device:', { isMobile, isIOS, isAndroid, isInStandaloneMode });
-    console.log('🔐 Browser Notification Permission:', NotificationAPI ? NotificationAPI.permission : 'N/A');
-    console.log('👤 User Agent:', navigator.userAgent);
+    console.log('📱 Platform:', isNativePlatform ? 'NATIVE (Android/iOS)' : 'WEB');
+    console.log('🔔 Permission:', isNativePlatform ? 'Using Capacitor' : NotificationAPI?.permission);
 
-    // iOS Safari warning
-    if (isIOS && !isInStandaloneMode) {
-        console.warn('⚠️ iOS Safari detected. Browser notifications NOT supported. Only in-app popups will work.');
-        console.warn('💡 To enable browser notifications on iOS: Add this app to Home Screen (PWA mode)');
+    // Request permission for native notifications if needed
+    if (isNativePlatform) {
+        try {
+            const permStatus = await LocalNotifications.checkPermissions();
+            console.log('📱 Native permission status:', permStatus);
+            
+            if (permStatus.display !== 'granted') {
+                const permResult = await LocalNotifications.requestPermissions();
+                console.log('📱 Native permission result:', permResult);
+                
+                if (permResult.display !== 'granted') {
+                    console.error('❌ Native notification permission denied');
+                    return { sent: 0, skipped: 0, errors: [{ type: 'permission', error: 'Permission denied' }] };
+                }
+            }
+        } catch (error) {
+            console.error('❌ Failed to check/request permissions:', error);
+            errors.push({ type: 'permission', error: error.message });
+        }
     }
+
+    const notificationsToSchedule = [];
 
     subscriptions.forEach(sub => {
         if (!sub.nextBillingDate) {
@@ -55,7 +70,6 @@ export const checkAndSendNotifications = (
 
         console.log(`📊 ${sub.name}:`, {
             nextBillingDate: sub.nextBillingDate,
-            nextDateNormalized: nextDateNormalized.toDateString(),
             daysUntil: daysUntil,
             shouldNotify: profile.reminderDays.includes(daysUntil)
         });
@@ -67,23 +81,12 @@ export const checkAndSendNotifications = (
             if (StorageAPI.getItem(lastNotifiedKey) !== 'true') {
                 let notificationSent = false;
 
-                // ==========================================
-                // 1. IN-APP POPUP (Works everywhere including iOS)
-                // ==========================================
+                // 1. IN-APP POPUP (Works everywhere)
                 if (showInAppPopup && typeof showInAppPopup === 'function') {
                     try {
                         console.log(`📱 Showing in-app popup for ${sub.name}...`);
-
-                        // Delay on mobile to ensure DOM is ready
-                        if (isMobile) {
-                            setTimeout(() => {
-                                showInAppPopup(sub, daysUntil);
-                                console.log(`✅ In-app popup triggered for ${sub.name} (mobile)`);
-                            }, 100);
-                        } else {
-                            showInAppPopup(sub, daysUntil);
-                            console.log(`✅ In-app popup shown for ${sub.name} (desktop)`);
-                        }
+                        showInAppPopup(sub, daysUntil);
+                        console.log(`✅ In-app popup shown for ${sub.name}`);
                         notificationSent = true;
                     } catch (error) {
                         console.error(`❌ Failed to show in-app popup for ${sub.name}:`, error);
@@ -91,37 +94,38 @@ export const checkAndSendNotifications = (
                     }
                 }
 
-                // ==========================================
-                // 2. BROWSER NOTIFICATION (Skip on iOS Safari)
-                // ==========================================
-                if (canUseBrowserNotifications) {
+                // 2. NATIVE OR BROWSER NOTIFICATION
+                const notificationTitle = '🔔 Subscription Reminder';
+                const notificationBody = `${sub.name} renewal of ${sub.cost} ${sub.currency} is ${daysUntil === 0 ? 'today' : daysUntil === 1 ? 'tomorrow' : `in ${daysUntil} days`}!`;
+
+                if (isNativePlatform) {
+                    // Use Capacitor Local Notifications for native apps
+                    notificationsToSchedule.push({
+                        title: notificationTitle,
+                        body: notificationBody,
+                        id: Date.now() + Math.random(), // Unique ID
+                        schedule: { at: new Date(Date.now() + 1000) }, // Schedule 1 second from now
+                        sound: undefined,
+                        attachments: undefined,
+                        actionTypeId: "",
+                        extra: {
+                            subscriptionId: sub.id,
+                            subscriptionName: sub.name
+                        }
+                    });
+                    notificationSent = true;
+                    console.log(`✅ Native notification queued for ${sub.name}`);
+                } else if (canUseBrowserNotifications) {
+                    // Use Web Notifications API for browser
                     try {
-                        const notificationTitle = '🔔 Subscription Reminder';
-                        const notificationBody = `${sub.name} renewal of ${sub.cost} ${sub.currency} is ${daysUntil === 0 ? 'today' : daysUntil === 1 ? 'tomorrow' : `in ${daysUntil} days`}!`;
-
-                        console.log(`🔔 Sending browser notification for ${sub.name}...`);
-
-                        // Build notification options
-                        const notificationOptions = {
+                        const notification = new NotificationAPI(notificationTitle, {
                             body: notificationBody,
                             icon: sub.image || '/logo192.png',
                             badge: '/logo192.png',
                             tag: lastNotifiedKey,
-                            requireInteraction: isMobile, // Keep visible on mobile
-                            silent: false,
-                            timestamp: Date.now()
-                        };
-
-                        // Add Android-specific features
-                        if (isAndroid) {
-                            if ('vibrate' in navigator) {
-                                notificationOptions.vibrate = [200, 100, 200];
-                                console.log('📳 Added vibration pattern for Android');
-                            }
-                        }
-
-                        // Create notification
-                        const notification = new NotificationAPI(notificationTitle, notificationOptions);
+                            requireInteraction: false,
+                            silent: false
+                        });
 
                         notification.onclick = function (event) {
                             event.preventDefault();
@@ -130,39 +134,19 @@ export const checkAndSendNotifications = (
                             notification.close();
                         };
 
-                        notification.onerror = function (event) {
-                            console.error(`❌ Notification error for ${sub.name}:`, event);
-                        };
-
-                        notification.onshow = function () {
-                            console.log(`👀 Notification shown for ${sub.name}`);
-                        };
-
-                        // Auto-close after timeout
-                        const autoCloseTime = isMobile ? 30000 : 15000;
                         setTimeout(() => {
                             try {
                                 notification.close();
-                                console.log(`🔕 Auto-closed notification for ${sub.name}`);
                             } catch (e) {
                                 // Notification may already be closed
                             }
-                        }, autoCloseTime);
+                        }, 15000);
 
                         notificationSent = true;
-                        console.log(`✅ Browser notification sent for ${sub.name} (${daysUntil} days)`);
+                        console.log(`✅ Browser notification sent for ${sub.name}`);
                     } catch (error) {
                         console.error(`❌ Failed to send browser notification for ${sub.name}:`, error);
                         errors.push({ subscription: sub.name, type: 'browser', error: error.message });
-                    }
-                } else {
-                    // Log why browser notifications were skipped
-                    if (!NotificationAPI) {
-                        console.log('⏭️ Browser notifications not supported on this device');
-                    } else if (NotificationAPI.permission !== 'granted') {
-                        console.log('⏭️ Browser notification permission not granted');
-                    } else if (isIOS && !isInStandaloneMode) {
-                        console.log('⏭️ iOS Safari - browser notifications skipped (use PWA mode or in-app popup)');
                     }
                 }
 
@@ -183,16 +167,25 @@ export const checkAndSendNotifications = (
                 console.log(`⏭️ Already notified for ${sub.name} at ${daysUntil} days`);
                 skippedCount++;
             }
-        } else {
-            console.log(`⏭️ ${sub.name} not in reminder window (${daysUntil} days)`);
         }
     });
+
+    // Schedule all native notifications at once
+    if (isNativePlatform && notificationsToSchedule.length > 0) {
+        try {
+            await LocalNotifications.schedule({
+                notifications: notificationsToSchedule
+            });
+            console.log(`✅ Scheduled ${notificationsToSchedule.length} native notifications`);
+        } catch (error) {
+            console.error('❌ Failed to schedule native notifications:', error);
+            errors.push({ type: 'native-schedule', error: error.message });
+        }
+    }
 
     const result = { sent: sentCount, skipped: skippedCount, errors };
     console.log('🏁 === NOTIFICATION CHECK COMPLETE ===');
     console.log('📊 Result:', result);
-    console.log('✅ In-app popups: Always shown when subscription matches');
-    console.log('🔔 Browser notifications:', canUseBrowserNotifications ? 'Sent' : 'Skipped (see reasons above)');
 
     return result;
 };

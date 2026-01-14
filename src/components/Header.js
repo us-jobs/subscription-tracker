@@ -75,7 +75,7 @@ const Header = ({ userName, notificationsEnabled, onEditName, onRequestNotificat
             {/* SEO & Promotional Banner Content */}
             <div className="mt-8 relative z-10">
                 <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight mb-3">
-                    SubTrack - Never Miss a Subscription Payment
+                    SubTrack - Never Miss a Subscription Payment!
                 </h1>
                 <p className="hidden md:block text-indigo-100 text-sm sm:text-base max-w-2xl leading-relaxed opacity-90 mb-6">
                     Smart subscription manager with AI-powered receipt scanning. Track all your subscriptions,

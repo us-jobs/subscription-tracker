@@ -1,0 +1,44 @@
+buildscript {
+    ext {
+        kotlin_version = '1.9.0'  // Add this line to define kotlin_version
+    }
+    repositories {
+//        google()
+//        mavenCentral()
+    }
+    dependencies {
+        // ✅ ONLY classpath dependencies here
+        classpath 'com.android.tools.build:gradle:8.13.2'
+        classpath 'com.google.gms:google-services:4.4.0'  // ✅ Use this
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+    }
+}
+
+apply from: "variables.gradle"
+
+allprojects {
+    repositories {
+        google()  // This must come FIRST
+        mavenCentral()
+        maven { url "https://www.jitpack.io" }
+
+        // Remove or fix flatDir repositories
+        // flatDir {
+        //     dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+        // }
+    }
+}
+
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}
+}
+
+// Remove or comment out this configurations block for now
+// configurations.all {
+//     resolutionStrategy {
+//         force 'org.jetbrains.kotlin:kotlin-stdlib:1.9.0'
+//         force 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.0'
+//         force 'org.jetbrains.kotlin:ktlint:1.9.0'
+//     }
+// }
