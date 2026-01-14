@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Camera, Upload, X, Check } from 'lucide-react';
+import { Camera, Upload, X, Check, Loader2, Save } from 'lucide-react';
 
 const SubscriptionForm = ({
     initialData,
@@ -14,6 +14,7 @@ const SubscriptionForm = ({
         category: 'streaming', isTrial: false, trialEndDate: '', email: '', image: ''
     });
     const [errors, setErrors] = useState({});
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     useEffect(() => {
         if (initialData) {
@@ -37,9 +38,14 @@ const SubscriptionForm = ({
         return Object.keys(newErrors).length === 0;
     };
 
-    const handleSubmit = () => {
+    const handleSubmit = async () => {
         if (validateForm()) {
+            setIsSubmitting(true);
+            // Simulate brief delay for UX
+            await new Promise(r => setTimeout(r, 600));
             onSave(formData);
+            // Don't set false here immediately if onSave causes unmount, but safest to do so for stability if it doesn't
+            setIsSubmitting(false);
         }
     };
 
@@ -162,8 +168,22 @@ const SubscriptionForm = ({
                     <button onClick={onCancel} className="flex-1 px-4 py-2 border-2 border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-sm transition text-gray-700">
                         Cancel
                     </button>
-                    <button onClick={handleSubmit} className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center justify-center gap-2 font-medium text-sm transition shadow-sm">
-                        <Check size={16} /> {initialData?.id ? 'Update' : 'Save Subscription'}
+                    <button
+                        onClick={handleSubmit}
+                        disabled={isSubmitting}
+                        className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center justify-center gap-2 font-medium text-sm transition shadow-sm disabled:bg-indigo-400"
+                    >
+                        {isSubmitting ? (
+                            <>
+                                <Loader2 size={16} className="animate-spin" />
+                                {initialData?.id ? 'Updating...' : 'Saving...'}
+                            </>
+                        ) : (
+                            <>
+                                <Save size={16} />
+                                {initialData?.id ? 'Update' : 'Save'}
+                            </>
+                        )}
                     </button>
                 </div>
             </div>

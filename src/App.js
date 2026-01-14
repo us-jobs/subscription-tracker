@@ -21,7 +21,7 @@ import { processImageWithGemini } from './utils/geminiProcessor';
 import { checkAndSendNotifications, sendTestNotification } from './utils/notificationService';
 
 import { loadSubscriptions, saveSubscriptions, loadUserProfile, saveUserProfile } from './utils/storage';
-import { Camera, Upload, FileText, PieChart, List, AlertTriangle, Check, X, ShieldAlert, Download, Bell } from 'lucide-react';
+import { Camera, Upload, FileText, PieChart, List, AlertTriangle, Check, X, ShieldAlert, Download, Bell, Loader2 } from 'lucide-react';
 
 const App = () => {
   // Data State
@@ -505,6 +505,10 @@ const App = () => {
       }
     }
 
+    // Check if settings actually changed
+    const daysChanged = JSON.stringify(profile.reminderDays.sort()) !== JSON.stringify(days.sort());
+    const enabledChanged = profile.notificationsEnabled !== true;
+
     setProfile(prev => ({ ...prev, notificationsEnabled: true, reminderDays: days }));
 
     // Process pending subscription if exists
@@ -520,7 +524,8 @@ const App = () => {
       setView('list');
       setEditingSub(null);
       setNotification({ message: 'Subscription added & notifications enabled!', type: 'success' });
-    } else {
+    } else if (daysChanged || enabledChanged) {
+      // Only show notification if settings actually changed
       setNotification({ message: 'Notification settings updated!', type: 'success' });
     }
 
@@ -546,14 +551,7 @@ const App = () => {
         {/* Notification Popups - Mobile optimized positioning */}
         <div className="fixed top-4 left-0 right-0 z-[200] px-2 sm:px-4 pointer-events-none">
           <div className="max-w-sm ml-auto space-y-3 pointer-events-auto">
-            {notificationPopups.map(popup => (
-              <NotificationPopup
-                key={popup.id}
-                subscription={popup.subscription}
-                daysUntil={popup.daysUntil}
-                onClose={() => removeNotificationPopup(popup.id)}
-              />
-            ))}
+
           </div>
         </div>
 
@@ -697,21 +695,6 @@ const App = () => {
           <>
             <SummaryCards totals={calculateTotals()} count={subscriptions.length} />
 
-            {profile.notificationsEnabled && subscriptions.length > 0 && view === 'list' && (
-              <div className="mb-4">
-                <button
-                  onClick={handleTestNotification}
-                  className="w-full bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white font-semibold py-3 px-4 rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all transform hover:scale-105"
-                >
-                  <Bell size={20} className="animate-pulse" />
-                  🧪 Test Notifications Now
-                </button>
-                <p className="text-xs text-gray-500 text-center mt-2">
-                  Tests both in-app popup + browser/system notifications
-                </p>
-              </div>
-            )}
-
             <div className="flex justify-center mb-6">
               <div className="bg-gray-200 p-1 rounded-xl inline-flex shadow-inner">
                 <button onClick={() => setView('list')} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${view === 'list' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
@@ -730,10 +713,10 @@ const App = () => {
                 <div className="bg-white rounded-2xl shadow-lg p-4 sm:p-6 mb-6">
                   <h2 className="text-base font-bold text-gray-800 mb-4">{subscriptions.length === 0 ? '🚀 Add Your First Subscription' : 'Add New'}</h2>
                   {isProcessing ? (
-                    <div className="p-8 text-center text-purple-600 animate-pulse bg-purple-50 rounded-xl">
-                      <div className="text-2xl mb-2">📸</div>
-                      <div className="font-semibold">Processing Receipt...</div>
-                      <div className="text-xs text-purple-400 mt-1">Extracting details</div>
+                    <div className="p-8 text-center text-purple-600 animate-pulse bg-purple-50 rounded-xl flex flex-col items-center justify-center">
+                      <Loader2 size={48} className="animate-spin mb-3 text-purple-500" />
+                      <div className="font-semibold text-lg">Processing Receipt...</div>
+                      <div className="text-sm text-purple-400 mt-1">Extracting AI details</div>
                     </div>
                   ) : (
                     <div className="grid grid-cols-3 gap-3">

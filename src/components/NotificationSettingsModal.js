@@ -1,11 +1,12 @@
 
 import React, { useState } from 'react';
-import { X, Bell, Calendar, Check, Clock } from 'lucide-react';
+import { X, Bell, Calendar, Check, Clock, Loader2 } from 'lucide-react';
 
 const NotificationSettingsModal = ({ onClose, onSave, currentDays, isEnabling }) => {
     const [selectedDays, setSelectedDays] = useState(currentDays || [1, 3]);
     const [customDay, setCustomDay] = useState('');
     const [showCustom, setShowCustom] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
 
     const options = [0, 1, 3, 5, 7, 14, 30];
 
@@ -48,7 +49,10 @@ const NotificationSettingsModal = ({ onClose, onSave, currentDays, isEnabling })
 
                 <div className="p-6">
                     <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-4 italic">
-                        Select reminder timing
+                        {selectedDays.length > 0
+                            ? `Get notified before ${selectedDays.sort((a, b) => a - b).map(d => d === 0 ? 'Same Day' : d === 1 ? '1 day' : `${d} days`).join(', ')} of your next billing`
+                            : 'Select reminder timing'
+                        }
                     </label>
 
                     <div className="grid grid-cols-3 gap-2 mb-6">
@@ -94,12 +98,27 @@ const NotificationSettingsModal = ({ onClose, onSave, currentDays, isEnabling })
 
                     <div className="flex flex-col gap-3 mt-4">
                         <button
-                            onClick={handleSave}
-                            disabled={selectedDays.length === 0}
-                            className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 text-white font-bold py-3 rounded-xl transition shadow-lg shadow-indigo-100 flex items-center justify-center gap-2"
+                            onClick={async () => {
+                                setIsSaving(true);
+                                // Small delay for UX
+                                await new Promise(r => setTimeout(r, 800));
+                                handleSave();
+                                setIsSaving(false);
+                            }}
+                            disabled={selectedDays.length === 0 || isSaving}
+                            className={`w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 text-white font-bold py-3 rounded-xl transition shadow-lg shadow-indigo-100 flex items-center justify-center gap-2`}
                         >
-                            <Check size={18} />
-                            {isEnabling ? 'Confirm & Enable' : 'Save Changes'}
+                            {isSaving ? (
+                                <>
+                                    <Loader2 size={18} className="animate-spin" />
+                                    {isEnabling ? 'Enabling...' : 'Saving...'}
+                                </>
+                            ) : (
+                                <>
+                                    <Check size={18} />
+                                    {isEnabling ? 'Confirm & Enable' : 'Save Changes'}
+                                </>
+                            )}
                         </button>
                         <button
                             onClick={onClose}

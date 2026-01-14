@@ -1,12 +1,13 @@
 
 import React, { useState } from 'react';
-import { X, Save, ExternalLink, Check, Eye, EyeOff, Trash2, Download, BrainCircuit, ShieldCheck, Lightbulb, TrendingDown } from 'lucide-react';
+import { X, Save, ExternalLink, Check, Eye, EyeOff, Trash2, Download, BrainCircuit, ShieldCheck, Lightbulb, TrendingDown, Loader2 } from 'lucide-react';
 
 const SettingsModal = ({ onClose, onSave, initialApiKey, onRestartTour, onDownloadBackup }) => {
     const [apiKey, setApiKey] = useState(initialApiKey || '');
     const [showKey, setShowKey] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
 
     const handleSave = () => {
         if (apiKey && apiKey.trim().length < 20) {
@@ -132,10 +133,30 @@ const SettingsModal = ({ onClose, onSave, initialApiKey, onRestartTour, onDownlo
                         Cancel
                     </button>
                     <button
-                        onClick={handleSave}
+                        onClick={async () => {
+                            if (apiKey && apiKey.trim().length < 20) {
+                                setError('Key looks too short. Please check.');
+                                return;
+                            }
+                            setIsSaving(true);
+                            await new Promise(r => setTimeout(r, 800));
+                            onSave(apiKey);
+                            setSuccess(true);
+                            setIsSaving(false);
+                            setTimeout(() => {
+                                setSuccess(false);
+                                onClose();
+                            }, 1000);
+                        }}
                         className={`px-6 py-2 rounded-lg text-white font-medium flex items-center gap-2 transition ${success ? 'bg-green-600' : 'bg-indigo-600 hover:bg-indigo-700'}`}
                     >
-                        {success ? <><Check size={18} /> Saved</> : <><Save size={18} /> Save Settings</>}
+                        {isSaving ? (
+                            <><Loader2 size={18} className="animate-spin" /> Saving...</>
+                        ) : success ? (
+                            <><Check size={18} /> Saved</>
+                        ) : (
+                            <><Save size={18} /> Save Settings</>
+                        )}
                     </button>
                 </div>
             </div>

@@ -1,8 +1,19 @@
 
-import React from 'react';
-import { X, AlertCircle, FileText, RefreshCw, ChevronRight } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, AlertCircle, FileText, RefreshCw, ChevronRight, Loader2 } from 'lucide-react';
 
 const AIErrorModal = ({ error, onClose, onManualAdd, onRetry }) => {
+    const [isRetrying, setIsRetrying] = useState(false);
+
+    const handleRetryClick = async () => {
+        setIsRetrying(true);
+        // Simulate brief delay
+        await new Promise(r => setTimeout(r, 600));
+        onClose();
+        onRetry();
+        setIsRetrying(false);
+    };
+
     return (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-[80] backdrop-blur-sm animate-fade-in">
             <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden transform transition-all scale-100">
@@ -39,14 +50,21 @@ const AIErrorModal = ({ error, onClose, onManualAdd, onRetry }) => {
                         </button>
 
                         <button
-                            onClick={() => {
-                                onClose();
-                                onRetry();
-                            }}
-                            className="w-full py-3 text-gray-400 text-sm font-semibold hover:text-gray-600 transition flex items-center justify-center gap-2"
+                            onClick={handleRetryClick}
+                            disabled={isRetrying}
+                            className="w-full py-3 text-gray-500 text-sm font-semibold hover:text-gray-700 transition flex items-center justify-center gap-2"
                         >
-                            <RefreshCw size={14} />
-                            Try Again
+                            {isRetrying ? (
+                                <>
+                                    <Loader2 size={16} className="animate-spin" />
+                                    Retrying...
+                                </>
+                            ) : (
+                                <>
+                                    <RefreshCw size={14} />
+                                    Try Again
+                                </>
+                            )}
                         </button>
                     </div>
                 </div>

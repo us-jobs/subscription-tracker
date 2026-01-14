@@ -1,12 +1,15 @@
 
 import React, { useRef, useState, useEffect } from 'react';
-import { Camera, X } from 'lucide-react';
+import { Camera, X, Settings, RefreshCcw, Loader2 } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
+import { App } from '@capacitor/app';
 
 const CameraCapture = ({ onCapture, onCancel }) => {
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
     const streamRef = useRef(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [isCapturing, setIsCapturing] = useState(false);
     const [error, setError] = useState('');
 
     useEffect(() => {
@@ -36,8 +39,48 @@ const CameraCapture = ({ onCapture, onCancel }) => {
             }
         } catch (err) {
             console.error('Camera error:', err);
-            setError('Camera access denied. Please verify permissions.');
+            if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+                setError('permission_denied');
+            } else if (err.name === 'NotFoundError') {
+                setError('no_camera');
+            } else {
+                setError('Camera error: ' + err.message);
+            }
             setIsLoading(false);
+        }
+    };
+
+    const [settingsError, setSettingsError] = useState(false);
+    const [openingSettings, setOpeningSettings] = useState(false);
+    const [retrying, setRetrying] = useState(false);
+
+    const handleRetry = () => {
+        setRetrying(true);
+        setIsLoading(true);
+        setError('');
+        setSettingsError(false);
+        // Small delay to show the loader
+        setTimeout(() => {
+            startCamera();
+            setRetrying(false);
+        }, 800);
+    };
+
+    const handleOpenSettings = async () => {
+        setOpeningSettings(true);
+        console.log('Attempting to open settings...');
+
+        try {
+            // Add slight delay for realistic feel
+            await new Promise(resolve => setTimeout(resolve, 800));
+            await App.openAppSettings();
+            console.log('Settings opened successfully');
+        } catch (e) {
+            console.error('Failed to open settings:', e);
+            setSettingsError(true);
+            alert('Could not open settings automatically. Please open Settings > Apps > SubTrack manually.');
+        } finally {
+            setOpeningSettings(false);
         }
     };
 
@@ -49,25 +92,32 @@ const CameraCapture = ({ onCapture, onCancel }) => {
     };
 
     const handleCapture = () => {
-        if (!videoRef.current || !canvasRef.current) return;
-        const video = videoRef.current;
+        if (!videoRef.current || !canvasRef.current || isCapturing) return;
 
-        if (video.readyState !== video.HAVE_ENOUGH_DATA) {
-            return;
-        }
+        setIsCapturing(true);
+        // Small delay to let the UI update and show the loader
+        setTimeout(() => {
+            const video = videoRef.current;
 
-        const canvas = canvasRef.current;
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(video, 0, 0);
-
-        canvas.toBlob(blob => {
-            if (blob) {
-                onCapture(blob); // Pass the blob back to parent
+            if (video.readyState !== video.HAVE_ENOUGH_DATA) {
+                setIsCapturing(false);
+                return;
             }
-        }, 'image/jpeg', 0.95);
+
+            const canvas = canvasRef.current;
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0);
+
+            canvas.toBlob(blob => {
+                if (blob) {
+                    onCapture(blob); // Pass the blob back to parent
+                }
+                setIsCapturing(false);
+            }, 'image/jpeg', 0.95);
+        }, 300);
     };
 
     return (
@@ -78,14 +128,72 @@ const CameraCapture = ({ onCapture, onCancel }) => {
             </div>
 
             {error ? (
-                <div className="bg-red-50 text-red-600 p-4 rounded-lg text-center mb-4">
-                    <p>{error}</p>
-                    <button
-                        onClick={onCancel}
-                        className="mt-2 bg-red-100 px-4 py-2 rounded text-sm font-semibold hover:bg-red-200"
-                    >
-                        Close
-                    </button>
+                <div className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl p-8 flex flex-col items-center justify-center text-center min-h-[300px]">
+                    {error === 'permission_denied' ? (
+                        <>
+                            <div className="w-20 h-20 bg-red-100 text-red-500 rounded-full flex items-center justify-center mb-4">
+                                <Camera size={40} />
+                            </div>
+                            <h3 className="text-lg font-bold text-gray-900 mb-2">Camera Access Required</h3>
+                            <p className="text-gray-600 mb-6 max-w-xs mx-auto">
+                                Please allow camera access to scan your subscription details.
+                            </p>
+
+                            <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 text-sm textual-gray-600 text-left w-full max-w-xs mb-6">
+                                <p className="font-semibold mb-2">How to enable:</p>
+                                <ul className="list-disc pl-5 space-y-1">
+                                    {settingsError ? (
+                                        <>
+                                            <li>Go to <strong>Settings</strong></li>
+                                            <li>Select <strong>Permissions</strong></li>
+                                            <li>Allow <strong>Camera</strong> Access</li>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <li>Tap <strong>Enable Here</strong> below</li>
+                                            <li>Select <strong>Permissions</strong></li>
+                                            <li>Tap <strong>Camera</strong> and choose <strong>Allow</strong></li>
+                                        </>
+                                    )}
+                                </ul>
+                            </div>
+
+                            <div className="flex flex-col gap-3 w-full max-w-xs">
+                                {Capacitor.isNativePlatform() && !settingsError && (
+                                    <button
+                                        onClick={handleOpenSettings}
+                                        disabled={openingSettings}
+                                        className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-indigo-700 transition flex items-center justify-center gap-2 disabled:bg-indigo-400"
+                                    >
+                                        {openingSettings ? <Loader2 size={18} className="animate-spin" /> : <Settings size={18} />}
+                                        {openingSettings ? 'Opening...' : 'Enable Here'}
+                                    </button>
+                                )}
+
+                                <button
+                                    onClick={handleRetry}
+                                    disabled={retrying}
+                                    className="bg-gray-100 text-gray-700 px-6 py-3 rounded-xl font-semibold hover:bg-gray-200 transition flex items-center justify-center gap-2 disabled:text-gray-400"
+                                >
+                                    {retrying ? <Loader2 size={18} className="animate-spin" /> : <RefreshCcw size={18} />}
+                                    {retrying ? 'Retrying...' : 'Try Again'}
+                                </button>
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            <div className="w-20 h-20 bg-gray-200 text-gray-500 rounded-full flex items-center justify-center mb-4">
+                                <X size={40} />
+                            </div>
+                            <p className="text-gray-800 font-medium mb-4">{error === 'no_camera' ? 'No camera found' : error}</p>
+                            <button
+                                onClick={onCancel}
+                                className="bg-gray-200 text-gray-800 px-6 py-2 rounded-lg font-semibold hover:bg-gray-300 transition"
+                            >
+                                Close
+                            </button>
+                        </>
+                    )}
                 </div>
             ) : (
                 <>
@@ -112,11 +220,20 @@ const CameraCapture = ({ onCapture, onCancel }) => {
                     <div className="flex gap-3">
                         <button
                             onClick={handleCapture}
-                            disabled={isLoading}
-                            className="flex-1 bg-green-500 text-white px-4 py-3 rounded-lg hover:bg-green-600 font-medium text-sm sm:text-base flex items-center justify-center gap-2 transition disabled:bg-gray-400"
+                            disabled={isLoading || isCapturing}
+                            className={`flex-1 bg-green-500 text-white px-4 py-3 rounded-lg hover:bg-green-600 font-medium text-sm sm:text-base flex items-center justify-center gap-2 transition disabled:bg-green-400 disabled:cursor-not-allowed`}
                         >
-                            <Camera size={20} />
-                            Capture
+                            {isCapturing ? (
+                                <>
+                                    <Loader2 size={20} className="animate-spin" />
+                                    Capturing...
+                                </>
+                            ) : (
+                                <>
+                                    <Camera size={20} />
+                                    Capture
+                                </>
+                            )}
                         </button>
                         <button
                             onClick={onCancel}

@@ -1,18 +1,25 @@
-import React from 'react';
-import { Bell, CheckCircle, X } from 'lucide-react';
+import React, { useState } from 'react';
+import { Bell, CheckCircle, X, Loader2 } from 'lucide-react';
 import { sendCustomNotification } from '../utils/notificationService';
 
 const SubscriptionSavedModal = ({ onClose, subscription, reminderDays }) => {
+    const [status, setStatus] = useState('idle'); // idle, loading, success
+
     const handleTestNotification = async () => {
+        setStatus('loading');
+
+        // Simulate a longer delay as requested (6 seconds)
+        await new Promise(resolve => setTimeout(resolve, 6000));
+
         const success = await sendCustomNotification(
             'Subscription Added Successfully',
             `Your "${subscription.name}" has been added. tracking started!`
         );
 
         if (success) {
-            // Maybe show a quick toast or just rely on the notification itself
-            // But for UX, let's close the modal after a short delay or just let user close
+            setStatus('success');
         } else {
+            setStatus('idle');
             alert('Could not send notification. Please check permissions.');
         }
     };
@@ -35,17 +42,37 @@ const SubscriptionSavedModal = ({ onClose, subscription, reminderDays }) => {
                 </p>
 
                 <div className="space-y-3">
-                    <button
-                        onClick={handleTestNotification}
-                        className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold py-3.5 rounded-xl transition shadow-lg flex items-center justify-center gap-2"
-                    >
-                        <Bell size={20} />
-                        Test Notification Now
-                    </button>
+                    {status === 'success' ? (
+                        <div className="w-full bg-green-500 text-white font-bold py-3.5 rounded-xl shadow-md flex items-center justify-center gap-2 animate-fade-in">
+                            <CheckCircle size={20} className="text-white" />
+                            Notification Sent!
+                        </div>
+                    ) : (
+                        <button
+                            onClick={handleTestNotification}
+                            disabled={status === 'loading'}
+                            className={`w-full font-bold py-3.5 rounded-xl transition shadow-lg flex items-center justify-center gap-2 ${status === 'loading'
+                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                : 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white'
+                                }`}
+                        >
+                            {status === 'loading' ? (
+                                <>
+                                    <Loader2 size={20} className="animate-spin" />
+                                    Sending...
+                                </>
+                            ) : (
+                                <>
+                                    <Bell size={20} />
+                                    Test Notification Now
+                                </>
+                            )}
+                        </button>
+                    )}
 
                     <button
                         onClick={onClose}
-                        className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-3 rounded-xl transition"
+                        className="w-full font-semibold py-3 rounded-xl transition flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700"
                     >
                         Close
                     </button>
