@@ -56,7 +56,7 @@ const SettingsModal = ({ onClose, onSave, initialApiKey, onRestartTour, onDownlo
                             <p className="text-xs text-indigo-900 font-semibold mb-2">Why use your own key?</p>
                             <ul className="text-xs text-indigo-700 space-y-1">
                                 <li className="flex items-center gap-1.5"><Check size={12} /> 10x More Accurate than offline mode</li>
-                                <li className="flex items-center gap-1.5"><Check size={12} /> Detects "Expires in 27 days" dates</li>
+                                <li className="flex items-center gap-1.5"><Check size={12} /> Recognizes relative dates like "Expires in 27 days"</li>
                                 <li className="flex items-center gap-1.5"><Check size={12} /> Reads complex invoice layouts</li>
                             </ul>
                         </div>

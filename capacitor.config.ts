@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.codingrhodes.subtrack',
+  appId: 'app.freesubscriptiontracker.twa',
   appName: 'SubTrack',
   webDir: 'build'
 };

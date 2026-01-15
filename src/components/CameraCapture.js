@@ -139,24 +139,7 @@ const CameraCapture = ({ onCapture, onCancel }) => {
                                 Please allow camera access to scan your subscription details.
                             </p>
 
-                            <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 text-sm textual-gray-600 text-left w-full max-w-xs mb-6">
-                                <p className="font-semibold mb-2">How to enable:</p>
-                                <ul className="list-disc pl-5 space-y-1">
-                                    {settingsError ? (
-                                        <>
-                                            <li>Go to <strong>Settings</strong></li>
-                                            <li>Select <strong>Permissions</strong></li>
-                                            <li>Allow <strong>Camera</strong> Access</li>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <li>Tap <strong>Enable Here</strong> below</li>
-                                            <li>Select <strong>Permissions</strong></li>
-                                            <li>Tap <strong>Camera</strong> and choose <strong>Allow</strong></li>
-                                        </>
-                                    )}
-                                </ul>
-                            </div>
+
 
                             <div className="flex flex-col gap-3 w-full max-w-xs">
                                 {Capacitor.isNativePlatform() && !settingsError && (
@@ -203,7 +186,7 @@ const CameraCapture = ({ onCapture, onCancel }) => {
                             autoPlay
                             playsInline
                             muted
-                            className="w-full h-auto object-cover"
+                            className={`w-full h-auto object-cover transition-opacity duration-300 ${isLoading ? 'opacity-0' : 'opacity-100'}`}
                             style={{ maxHeight: '60vh' }}
                         />
 

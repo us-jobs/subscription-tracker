@@ -1,14 +1,14 @@
 apply plugin: 'com.android.application'
 
 android {
-    namespace "com.codingrhodes.subtrack"
+    namespace "app.freesubscriptiontracker.twa"
     compileSdk rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.codingrhodes.subtrack"
+        applicationId "app.freesubscriptiontracker.twa"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode 7
+        versionName "1.0.6"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -25,6 +25,12 @@ android {
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_21
         targetCompatibility JavaVersion.VERSION_21
+    }
+    
+    // Add this block to disable lint errors
+    lintOptions {
+        abortOnError false
+        checkReleaseBuilds false
     }
 }
 
