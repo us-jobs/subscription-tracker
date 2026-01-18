@@ -1,14 +1,34 @@
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
+import { Preferences } from '@capacitor/preferences';
+
+const isNative = Capacitor.isNativePlatform();
+
+// Helper to get/set notification status using Capacitor Preferences
+const getNotificationStatus = async (key) => {
+    try {
+        const { value } = await Preferences.get({ key });
+        return value === 'true';
+    } catch (error) {
+        console.error('Failed to get notification status:', error);
+        return false;
+    }
+};
+
+const setNotificationStatus = async (key, status) => {
+    try {
+        await Preferences.set({ key, value: String(status) });
+    } catch (error) {
+        console.error('Failed to set notification status:', error);
+    }
+};
 
 export const checkAndSendNotifications = async (
     subscriptions,
     profile,
     showInAppPopup = null,
     forceCheck = false,
-    targetSubscriptionId = null,
-    NotificationAPI = window.Notification,
-    StorageAPI = localStorage
+    targetSubscriptionId = null
 ) => {
     // Early return if notifications are disabled or no subscriptions
     if (!profile.notificationsEnabled || subscriptions.length === 0) {
@@ -19,11 +39,11 @@ export const checkAndSendNotifications = async (
     const today = new Date();
     const todayNormalized = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
-    // Check if running on native platform (Android/iOS)
-    const isNativePlatform = Capacitor.isNativePlatform();
-    const canUseBrowserNotifications = !isNativePlatform &&
-        NotificationAPI &&
-        NotificationAPI.permission === 'granted';
+    // Check if we can use browser notifications (web only)
+    const canUseBrowserNotifications = !isNative &&
+        typeof window !== 'undefined' &&
+        'Notification' in window &&
+        Notification.permission === 'granted';
 
     let sentCount = 0;
     let skippedCount = 0;
@@ -32,11 +52,11 @@ export const checkAndSendNotifications = async (
     console.log('🔔 === NOTIFICATION CHECK START ===');
     console.log('📅 Today:', todayNormalized.toDateString());
     console.log('⚙️ Reminder days:', profile.reminderDays);
-    console.log('📱 Platform:', isNativePlatform ? 'NATIVE (Android/iOS)' : 'WEB');
-    console.log('🔔 Permission:', isNativePlatform ? 'Using Capacitor' : NotificationAPI?.permission);
+    console.log('📱 Platform:', isNative ? 'NATIVE (Android/iOS)' : 'WEB');
+    console.log('🔔 Permission:', isNative ? 'Using Capacitor' : (typeof window !== 'undefined' && 'Notification' in window ? window.Notification?.permission : 'N/A'));
 
     // Request permission for native notifications if needed
-    if (isNativePlatform) {
+    if (isNative) {
         try {
             const permStatus = await LocalNotifications.checkPermissions();
             console.log('📱 Native permission status:', permStatus);
@@ -58,15 +78,15 @@ export const checkAndSendNotifications = async (
 
     const notificationsToSchedule = [];
 
-    subscriptions.forEach(sub => {
+    for (const sub of subscriptions) {
         // If targetSubscriptionId is provided, ONLY process that specific subscription
         if (targetSubscriptionId && sub.id !== targetSubscriptionId) {
-            return;
+            continue;
         }
 
         if (!sub.nextBillingDate) {
             console.log(`⏭️ Skipping ${sub.name} - no billing date`);
-            return;
+            continue;
         }
 
         // Parse strictly as local date (YYYY-MM-DD) to avoid UTC offsets
@@ -89,8 +109,9 @@ export const checkAndSendNotifications = async (
         // Send reminder if sub is due within reminder days OR forced Today
         if (shouldNotify) {
             const lastNotifiedKey = `notified_${sub.id}_${daysUntil}`;
+            const wasNotified = await getNotificationStatus(lastNotifiedKey);
 
-            if (forceCheck || StorageAPI.getItem(lastNotifiedKey) !== 'true') {
+            if (forceCheck || !wasNotified) {
                 let notificationSent = false;
 
                 // 1. IN-APP POPUP (Works everywhere)
@@ -110,12 +131,12 @@ export const checkAndSendNotifications = async (
                 const notificationTitle = '🔔 Subscription Reminder';
                 const notificationBody = `${sub.name} renewal of ${sub.cost} ${sub.currency} is ${daysUntil === 0 ? 'today' : daysUntil === 1 ? 'tomorrow' : `in ${daysUntil} days`}!`;
 
-                if (isNativePlatform) {
+                if (isNative) {
                     // Use Capacitor Local Notifications for native apps
                     notificationsToSchedule.push({
                         title: notificationTitle,
                         body: notificationBody,
-                        id: Math.floor(Date.now() % 2147483647), // Safe 32-bit integer
+                        id: Math.floor(Math.random() * 2147483647), // Random safe 32-bit integer
                         schedule: { at: new Date(Date.now() + 1000) }, // Schedule 1 second from now
                         sound: undefined,
                         attachments: undefined,
@@ -130,7 +151,7 @@ export const checkAndSendNotifications = async (
                 } else if (canUseBrowserNotifications) {
                     // Use Web Notifications API for browser
                     try {
-                        const notification = new NotificationAPI(notificationTitle, {
+                        const notification = new Notification(notificationTitle, {
                             body: notificationBody,
                             icon: sub.image || '/logo192.png',
                             badge: '/logo192.png',
@@ -142,7 +163,9 @@ export const checkAndSendNotifications = async (
                         notification.onclick = function (event) {
                             event.preventDefault();
                             console.log(`👆 Browser notification clicked for ${sub.name}`);
-                            window.focus();
+                            if (typeof window !== 'undefined') {
+                                window.focus();
+                            }
                             notification.close();
                         };
 
@@ -164,7 +187,7 @@ export const checkAndSendNotifications = async (
 
                 // Mark as notified if at least one notification method succeeded
                 if (notificationSent) {
-                    StorageAPI.setItem(lastNotifiedKey, 'true');
+                    await setNotificationStatus(lastNotifiedKey, true);
                     sentCount++;
                     console.log(`✅ Marked as notified: ${lastNotifiedKey}`);
                 } else {
@@ -180,10 +203,10 @@ export const checkAndSendNotifications = async (
                 skippedCount++;
             }
         }
-    });
+    }
 
     // Schedule all native notifications at once
-    if (isNativePlatform && notificationsToSchedule.length > 0) {
+    if (isNative && notificationsToSchedule.length > 0) {
         try {
             await LocalNotifications.schedule({
                 notifications: notificationsToSchedule
@@ -196,19 +219,18 @@ export const checkAndSendNotifications = async (
     }
 
     const result = { sent: sentCount, skipped: skippedCount, errors };
-    console.log('🏁 === NOTIFICATION CHECK COMPLETE ===');
+    console.log('🎯 === NOTIFICATION CHECK COMPLETE ===');
     console.log('📊 Result:', result);
 
     return result;
 };
 
 export const sendTestNotification = async () => {
-    const isNativePlatform = Capacitor.isNativePlatform();
     const notificationTitle = '🔔 Test Notification';
     const notificationBody = 'Success! Notifications are working correctly on your device.';
 
     try {
-        if (isNativePlatform) {
+        if (isNative) {
             // Check permission first
             const permStatus = await LocalNotifications.checkPermissions();
             if (permStatus.display !== 'granted') {
@@ -222,7 +244,7 @@ export const sendTestNotification = async () => {
                 notifications: [{
                     title: notificationTitle,
                     body: notificationBody,
-                    id: Math.floor(Date.now() % 2147483647),
+                    id: Math.floor(Math.random() * 2147483647),
                     schedule: { at: new Date(Date.now() + 1000) }, // 1 second delay
                     sound: undefined,
                     attachments: undefined,
@@ -233,7 +255,7 @@ export const sendTestNotification = async () => {
             return { success: true, method: 'native' };
         } else {
             // Web Notification
-            if (!('Notification' in window)) {
+            if (typeof window === 'undefined' || !('Notification' in window)) {
                 throw new Error('Not supported');
             }
 
@@ -251,6 +273,15 @@ export const sendTestNotification = async () => {
                 requireInteraction: false
             });
 
+            // Auto-close after 10 seconds
+            setTimeout(() => {
+                try {
+                    notification.close();
+                } catch (e) {
+                    // Already closed
+                }
+            }, 10000);
+
             return { success: true, method: 'web' };
         }
     } catch (error) {
@@ -260,10 +291,8 @@ export const sendTestNotification = async () => {
 };
 
 export const sendCustomNotification = async (title, body) => {
-    const isNativePlatform = Capacitor.isNativePlatform();
-
     try {
-        if (isNativePlatform) {
+        if (isNative) {
             const permStatus = await LocalNotifications.checkPermissions();
             if (permStatus.display !== 'granted') return false;
 
@@ -271,7 +300,7 @@ export const sendCustomNotification = async (title, body) => {
                 notifications: [{
                     title: title,
                     body: body,
-                    id: Math.floor(Date.now() % 2147483647),
+                    id: Math.floor(Math.random() * 2147483647),
                     schedule: { at: new Date(Date.now() + 1000) },
                     sound: undefined,
                     attachments: undefined,
@@ -281,17 +310,76 @@ export const sendCustomNotification = async (title, body) => {
             });
             return true;
         } else {
-            if (!('Notification' in window) || Notification.permission !== 'granted') return false;
+            if (typeof window === 'undefined' || !('Notification' in window) || Notification.permission !== 'granted') {
+                return false;
+            }
 
-            new Notification(title, {
+            const notification = new Notification(title, {
                 body: body,
                 icon: '/logo192.png',
                 requireInteraction: false
             });
+
+            // Auto-close after 10 seconds
+            setTimeout(() => {
+                try {
+                    notification.close();
+                } catch (e) {
+                    // Already closed
+                }
+            }, 10000);
+
             return true;
         }
     } catch (e) {
         console.error('Custom notification failed:', e);
+        return false;
+    }
+};
+
+// Helper function to clear notification history (useful for debugging)
+export const clearNotificationHistory = async () => {
+    try {
+        // Get all keys
+        const { keys } = await Preferences.keys();
+        
+        // Filter keys that start with 'notified_'
+        const notificationKeys = keys.filter(key => key.startsWith('notified_'));
+        
+        // Remove all notification status keys
+        await Promise.all(
+            notificationKeys.map(key => Preferences.remove({ key }))
+        );
+        
+        // Also clear last check date
+        await Preferences.remove({ key: 'lastNotificationCheck' });
+        
+        console.log(`✅ Cleared ${notificationKeys.length} notification history entries`);
+        return true;
+    } catch (error) {
+        console.error('Failed to clear notification history:', error);
+        return false;
+    }
+};
+
+// Helper to get last notification check date
+export const getLastNotificationCheck = async () => {
+    try {
+        const { value } = await Preferences.get({ key: 'lastNotificationCheck' });
+        return value;
+    } catch (error) {
+        console.error('Failed to get last notification check:', error);
+        return null;
+    }
+};
+
+// Helper to set last notification check date
+export const setLastNotificationCheck = async (date) => {
+    try {
+        await Preferences.set({ key: 'lastNotificationCheck', value: date });
+        return true;
+    } catch (error) {
+        console.error('Failed to set last notification check:', error);
         return false;
     }
 };

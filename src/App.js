@@ -16,20 +16,34 @@ import NotificationPopup from './components/NotificationPopup';
 import SubscriptionSavedModal from './components/SubscriptionSavedModal';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
+import { Preferences } from '@capacitor/preferences';
 
 import { processImageWithGemini } from './utils/geminiProcessor';
-import { checkAndSendNotifications, sendTestNotification } from './utils/notificationService';
+import { 
+  checkAndSendNotifications, 
+  sendTestNotification,
+  getLastNotificationCheck,
+  setLastNotificationCheck
+} from './utils/notificationService';
 
-import { loadSubscriptions, saveSubscriptions, loadUserProfile, saveUserProfile } from './utils/storage';
+import { 
+  loadSubscriptions, 
+  saveSubscriptions, 
+  loadUserProfile, 
+  saveUserProfile,
+  getApiKey,
+  setApiKey
+} from './utils/storage';
 import { Camera, Upload, FileText, PieChart, List, AlertTriangle, Check, X, ShieldAlert, Download, Bell, Loader2 } from 'lucide-react';
 
 const App = () => {
   // Data State
-  const [subscriptions, setSubscriptions] = useState(() => loadSubscriptions());
-  const [profile, setProfile] = useState(() => loadUserProfile());
-  const [apiKey, setApiKey] = useState('');
+  const [subscriptions, setSubscriptions] = useState([]);
+  const [profile, setProfile] = useState({ name: '', reminderDays: [1, 3], notificationsEnabled: false });
+  const [apiKey, setApiKeyState] = useState('');
   const [tempName, setTempName] = useState('');
   const [nameError, setNameError] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
 
   // UI State
   const [view, setView] = useState('list');
@@ -51,69 +65,95 @@ const App = () => {
   const [lastAIAction, setLastAIAction] = useState('');
   const [subToDelete, setSubToDelete] = useState(null);
   const [pendingSubscription, setPendingSubscription] = useState(null);
-  const [showSavedModal, setShowSavedModal] = useState(null); // { sub: object, reminderDays: [] }
+  const [showSavedModal, setShowSavedModal] = useState(null);
 
   const fileInputRef = useRef(null);
   const isInitialMount = useRef(true);
 
+  // Initialize app - Load all data
   useEffect(() => {
-    // Initialize UI based on loaded profile
-    if (profile.name) {
-      setTempName(profile.name);
-    } else {
-      setShowNamePrompt(true);
-    }
+    const initializeApp = async () => {
+      try {
+        console.log('🚀 Initializing app...');
+        
+        // Load all data in parallel
+        const [loadedSubs, loadedProfile, loadedKey] = await Promise.all([
+          loadSubscriptions(),
+          loadUserProfile(),
+          getApiKey()
+        ]);
 
-    const savedKey = localStorage.getItem('geminiApiKey');
-    if (savedKey) setApiKey(savedKey);
+        console.log('📦 Data loaded:', {
+          subscriptions: loadedSubs.length,
+          profile: loadedProfile,
+          hasApiKey: !!loadedKey
+        });
 
-    const tourDone = localStorage.getItem('hasSeenTourV1');
-    if (!tourDone) setShowTour(true);
+        setSubscriptions(loadedSubs);
+        setProfile(loadedProfile);
+        setApiKeyState(loadedKey);
 
-    // Check notification permission (works for both native and web)
-    const checkNotificationPermission = async () => {
-      const isNative = Capacitor.isNativePlatform();
+        // Handle initial UI state
+        if (!loadedProfile.name) {
+          setShowNamePrompt(true);
+        } else {
+          setTempName(loadedProfile.name);
+        }
 
-      if (isNative) {
+        // Check tour status
         try {
-          const permStatus = await LocalNotifications.checkPermissions();
-          if (permStatus.display === 'granted') {
-            setProfile(prev => ({ ...prev, notificationsEnabled: true }));
+          const { value } = await Preferences.get({ key: 'hasSeenTourV1' });
+          if (value !== 'true') {
+            setShowTour(true);
           }
         } catch (error) {
-          console.error('Failed to check native permissions:', error);
+          console.warn('Failed to check tour status:', error);
         }
-      } else {
-        if ('Notification' in window && Notification.permission === 'granted') {
-          setProfile(prev => ({ ...prev, notificationsEnabled: true }));
+
+        // Check notification permission
+        const isNative = Capacitor.isNativePlatform();
+        if (isNative) {
+          try {
+            const permStatus = await LocalNotifications.checkPermissions();
+            if (permStatus.display === 'granted' && !loadedProfile.notificationsEnabled) {
+              setProfile(prev => ({ ...prev, notificationsEnabled: true }));
+            }
+          } catch (error) {
+            console.error('Failed to check native permissions:', error);
+          }
+        } else {
+          if ('Notification' in window && Notification.permission === 'granted' && !loadedProfile.notificationsEnabled) {
+            setProfile(prev => ({ ...prev, notificationsEnabled: true }));
+          }
         }
+
+      } catch (error) {
+        console.error('❌ Failed to initialize app:', error);
+        setNotification({ 
+          message: 'Failed to load data. Please restart the app.', 
+          type: 'error' 
+        });
+      } finally {
+        setIsLoading(false);
+        console.log('✅ App initialized');
       }
     };
 
-    checkNotificationPermission();
-
-    // Service worker is only needed for web, not native
-    if (!Capacitor.isNativePlatform() && 'serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js')
-          .then(registration => {
-            console.log('✅ Service Worker registered successfully:', registration.scope);
-          })
-          .catch(error => {
-            console.error('❌ Service Worker registration failed:', error);
-          });
-      });
-    }
+    initializeApp();
   }, []);
 
-  // Save Data
+  // Save Data when changed
   useEffect(() => {
-    saveSubscriptions(subscriptions);
-  }, [subscriptions]);
+    if (!isLoading && subscriptions.length >= 0) {
+      saveSubscriptions(subscriptions);
+    }
+  }, [subscriptions, isLoading]);
 
   useEffect(() => {
-    saveUserProfile(profile);
-  }, [profile]);
+    if (!isLoading && profile.name !== undefined) {
+      saveUserProfile(profile);
+    }
+  }, [profile, isLoading]);
 
   // Show in-app notification popup
   const showNotificationPopup = (subscription, daysUntil) => {
@@ -144,38 +184,45 @@ const App = () => {
       return;
     }
 
-    if (profile.notificationsEnabled && subscriptions.length > 0) {
-      const lastCheckDate = localStorage.getItem('lastNotificationCheck');
-      const today = new Date().toDateString();
+    const checkNotifications = async () => {
+      if (profile.notificationsEnabled && subscriptions.length > 0) {
+        try {
+          const lastCheckDate = await getLastNotificationCheck();
+          const today = new Date().toDateString();
 
-      if (lastCheckDate !== today) {
-        const result = checkAndSendNotifications(
-          subscriptions,
-          profile,
-          showNotificationPopup
-        );
+          if (lastCheckDate !== today) {
+            const result = await checkAndSendNotifications(
+              subscriptions,
+              profile,
+              showNotificationPopup
+            );
 
-        if (result.sent > 0) {
-          localStorage.setItem('lastNotificationCheck', today);
+            if (result.sent > 0) {
+              await setLastNotificationCheck(today);
+            }
+          }
+        } catch (error) {
+          console.warn('Failed to check notifications:', error);
         }
       }
-    }
-  }, [profile.notificationsEnabled, profile.reminderDays]);
+    };
 
-  const handleSaveSettings = (key) => {
+    checkNotifications();
+  }, [profile.notificationsEnabled, profile.reminderDays, subscriptions.length]);
+
+  const handleSaveSettings = async (key) => {
     const cleanKey = key ? key.trim() : '';
-    setApiKey(cleanKey);
-
-    if (cleanKey) {
-      localStorage.setItem('geminiApiKey', cleanKey);
-    } else {
-      localStorage.removeItem('geminiApiKey');
-    }
+    setApiKeyState(cleanKey);
+    await setApiKey(cleanKey);
   };
 
-  const handleCompleteTour = () => {
+  const handleCompleteTour = async () => {
     setShowTour(false);
-    localStorage.setItem('hasSeenTourV1', 'true');
+    try {
+      await Preferences.set({ key: 'hasSeenTourV1', value: 'true' });
+    } catch (error) {
+      console.warn('Failed to save tour status:', error);
+    }
   };
 
   const handleRestartTour = () => {
@@ -183,7 +230,7 @@ const App = () => {
     setShowTour(true);
   };
 
-  // Test Notification Function with dual notifications
+  // Test Notification Function
   const handleTestNotification = async () => {
     setNotification({ message: 'Sending test notification...', type: 'info' });
 
@@ -200,7 +247,6 @@ const App = () => {
         type: 'error'
       });
 
-      // If permission denied, show settings helper
       if (result.error.includes('Permission denied') || result.error.includes('denied')) {
         setTimeout(() => {
           if (window.confirm("Notifications are blocked. Open settings to enable?")) {
@@ -215,13 +261,14 @@ const App = () => {
 
   const handleSaveSubscription = async (data) => {
     if (data.id) {
+      // Editing existing subscription
       setSubscriptions(prev => {
         const updated = prev.map(s => s.id === data.id ? data : s);
 
         // IMMEDIATE NOTIFICATION CHECK for edited item
-        setTimeout(() => {
+        setTimeout(async () => {
           console.log('🔄 Triggering immediate notification check for edited subscription...');
-          checkAndSendNotifications(updated, profile, showNotificationPopup, true); // Force check
+          await checkAndSendNotifications(updated, profile, showNotificationPopup, true);
         }, 500);
 
         return updated;
@@ -229,7 +276,7 @@ const App = () => {
       setView('list');
       setEditingSub(null);
     } else {
-      // Check if notifications are enabled before saving new subscription
+      // Adding new subscription - check permissions first
       const isNative = Capacitor.isNativePlatform();
       let hasPermission = false;
 
@@ -247,12 +294,11 @@ const App = () => {
       if (!hasPermission) {
         console.log('🚫 Permission missing, blocking save...');
 
-        // If explicitly denied, we need to tell user to go to settings
         const isDenied = (!isNative && Notification.permission === 'denied');
 
         if (isDenied) {
           alert('⚠️ Notifications are blocked! Please enable them in your browser/device settings to save subscriptions.');
-          return; // Stop here, don't even open inner modal as it can't fix "denied" state
+          return;
         }
 
         setProfile(prev => ({ ...prev, notificationsEnabled: false }));
@@ -267,17 +313,15 @@ const App = () => {
         status: 'active',
         nextBillingDate: new Date(data.nextBillingDate).toISOString().split('T')[0]
       };
+      
       setSubscriptions(prev => {
         const updated = [...prev, newSub];
 
-
         // IMMEDIATE NOTIFICATION CHECK for the new item
-        // Check ONLY the new subscription. If it notifies, great. If not, show the manual confirmation modal.
         setTimeout(async () => {
           console.log('🔄 Triggering immediate notification check for new subscription...');
           const result = await checkAndSendNotifications(updated, profile, showNotificationPopup, true, newSub.id);
 
-          // If no notification was sent (e.g. because it's due next month and not today), show the "Saved" modal
           if (result.sent === 0) {
             setShowSavedModal({ sub: newSub, reminderDays: profile.reminderDays });
           }
@@ -298,7 +342,6 @@ const App = () => {
   const confirmDelete = async () => {
     if (subToDelete) {
       setIsDeleting(true);
-      // Simulate deleting for better UX
       await new Promise(r => setTimeout(r, 600));
 
       setSubscriptions(prev => prev.filter(s => s.id !== subToDelete));
@@ -378,8 +421,8 @@ const App = () => {
       let message = err.message || 'Scan failed. Please try again.';
 
       if (message.includes('INVALID_KEY') || message.includes('404')) {
-        setApiKey('');
-        localStorage.removeItem('geminiApiKey');
+        setApiKeyState('');
+        await setApiKey('');
         message = 'Invalid Gemini Key removed.';
       }
 
@@ -411,17 +454,29 @@ const App = () => {
   };
 
   const calculateTotals = () => {
-    const cycles = { weekly: 0.23, biweekly: 0.46, monthly: 1, bimonthly: 2, quarterly: 3, semiannually: 6, yearly: 12, biennially: 24 };
-    const monthly = subscriptions.reduce((sum, sub) => sum + (parseFloat(sub.cost || 0) / (cycles[sub.billingCycle] || 1)), 0);
-    return { monthly: monthly.toFixed(2), yearly: (monthly * 12).toFixed(2) };
+    const cycles = { 
+      weekly: 0.23, 
+      biweekly: 0.46, 
+      monthly: 1, 
+      bimonthly: 2, 
+      quarterly: 3, 
+      semiannually: 6, 
+      yearly: 12, 
+      biennially: 24 
+    };
+    const monthly = subscriptions.reduce((sum, sub) => 
+      sum + (parseFloat(sub.cost || 0) / (cycles[sub.billingCycle] || 1)), 0
+    );
+    return { 
+      monthly: monthly.toFixed(2), 
+      yearly: (monthly * 12).toFixed(2) 
+    };
   };
 
-  // Replace the handleRequestNotifications function with this:
   const handleRequestNotifications = async () => {
     const isNative = Capacitor.isNativePlatform();
 
     if (isNative) {
-      // Use Capacitor for native platforms
       try {
         const permStatus = await LocalNotifications.checkPermissions();
 
@@ -444,7 +499,6 @@ const App = () => {
         setTimeout(() => setNotification({ message: '', type: '' }), 3000);
       }
     } else {
-      // Use Web Notifications API for browser
       if (!('Notification' in window)) {
         setNotification({ message: 'Notifications not supported on this device', type: 'error' });
         setTimeout(() => setNotification({ message: '', type: '' }), 3000);
@@ -466,7 +520,6 @@ const App = () => {
     }
   };
 
-  // Replace the handleSaveNotificationSettings function with this:
   const handleSaveNotificationSettings = async (days) => {
     console.log('💾 handleSaveNotificationSettings called', { pending: !!pendingSubscription });
     const isNative = Capacitor.isNativePlatform();
@@ -496,7 +549,6 @@ const App = () => {
         return;
       }
     } else {
-      // Browser permission check
       if ('Notification' in window && Notification.permission !== 'granted') {
         const permission = await Notification.requestPermission();
 
@@ -532,36 +584,63 @@ const App = () => {
       setEditingSub(null);
       setNotification({ message: 'Subscription added & notifications enabled!', type: 'success' });
     } else if (daysChanged || enabledChanged) {
-      // Only show notification if settings actually changed
       setNotification({ message: 'Notification settings updated!', type: 'success' });
     }
 
     setShowNotificationSettings(false);
     setTimeout(() => setNotification({ message: '', type: '' }), 3000);
-    localStorage.removeItem('lastNotificationCheck');
+    
+    try {
+      await Preferences.remove({ key: 'lastNotificationCheck' });
+    } catch (error) {
+      console.warn('Failed to remove last notification check:', error);
+    }
   };
 
   const handleCloseNotificationSettings = () => {
     if (pendingSubscription) {
       setNotification({ message: 'To add a subscription notification must be turned on', type: 'error' });
       setTimeout(() => setNotification({ message: '', type: '' }), 3000);
-      // Do NOT close modal
     } else {
       setShowNotificationSettings(false);
     }
   };
 
+  // Loading screen
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-6xl mb-4 animate-bounce">💳</div>
+          <div className="text-2xl font-bold text-gray-800 mb-2">SubTrack</div>
+          <div className="flex items-center justify-center gap-2">
+            <Loader2 size={20} className="animate-spin text-indigo-600" />
+            <div className="text-sm text-gray-500">Loading your subscriptions...</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 p-2 sm:p-4 font-sans text-gray-900">
       <div className="max-w-2xl mx-auto">
 
-        {/* Notification Popups - Mobile optimized positioning */}
+        {/* Notification Popups */}
         <div className="fixed top-4 left-0 right-0 z-[200] px-2 sm:px-4 pointer-events-none">
           <div className="max-w-sm ml-auto space-y-3 pointer-events-auto">
-
+            {notificationPopups.map(popup => (
+              <NotificationPopup
+                key={popup.id}
+                subscription={popup.subscription}
+                daysUntil={popup.daysUntil}
+                onClose={() => removeNotificationPopup(popup.id)}
+              />
+            ))}
           </div>
         </div>
 
+        {/* Name Prompt Modal */}
         {showNamePrompt && (
           <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
             <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm animate-fade-in">
@@ -610,6 +689,7 @@ const App = () => {
           </div>
         )}
 
+        {/* Delete Confirmation Modal */}
         {showDeleteConfirm && (
           <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-fade-in">
             <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm text-center">
@@ -704,7 +784,7 @@ const App = () => {
             onUploadDifferent={() => fileInputRef.current?.click()}
           />
         )}
-
+        
         {(view === 'list' || view === 'analytics') && (
           <>
             <SummaryCards totals={calculateTotals()} count={subscriptions.length} />
