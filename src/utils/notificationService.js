@@ -26,7 +26,6 @@ const setNotificationStatus = async (key, status) => {
 export const checkAndSendNotifications = async (
     subscriptions,
     profile,
-    showInAppPopup = null,
     forceCheck = false,
     targetSubscriptionId = null
 ) => {
@@ -113,19 +112,6 @@ export const checkAndSendNotifications = async (
 
             if (forceCheck || !wasNotified) {
                 let notificationSent = false;
-
-                // 1. IN-APP POPUP (Works everywhere)
-                if (showInAppPopup && typeof showInAppPopup === 'function') {
-                    try {
-                        console.log(`📱 Showing in-app popup for ${sub.name}...`);
-                        showInAppPopup(sub, daysUntil);
-                        console.log(`✅ In-app popup shown for ${sub.name}`);
-                        notificationSent = true;
-                    } catch (error) {
-                        console.error(`❌ Failed to show in-app popup for ${sub.name}:`, error);
-                        errors.push({ subscription: sub.name, type: 'in-app', error: error.message });
-                    }
-                }
 
                 // 2. NATIVE OR BROWSER NOTIFICATION
                 const notificationTitle = '🔔 Subscription Reminder';

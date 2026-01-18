@@ -12,7 +12,6 @@ import GuidanceSections from './components/GuidanceSections';
 import NotificationSettingsModal from './components/NotificationSettingsModal';
 import AIUpgradeModal from './components/AIUpgradeModal';
 import AIErrorModal from './components/AIErrorModal';
-import NotificationPopup from './components/NotificationPopup';
 import SubscriptionSavedModal from './components/SubscriptionSavedModal';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
@@ -51,7 +50,6 @@ const App = () => {
   const [previewImage, setPreviewImage] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [notification, setNotification] = useState({ message: '', type: '' });
-  const [notificationPopups, setNotificationPopups] = useState([]);
 
   // Modals
   const [showNamePrompt, setShowNamePrompt] = useState(false);
@@ -155,27 +153,6 @@ const App = () => {
     }
   }, [profile, isLoading]);
 
-  // Show in-app notification popup
-  const showNotificationPopup = (subscription, daysUntil) => {
-    const id = Date.now();
-    const newPopup = {
-      id,
-      subscription,
-      daysUntil,
-      timestamp: new Date()
-    };
-
-    setNotificationPopups(prev => [...prev, newPopup]);
-
-    // Auto-remove after 10 seconds
-    setTimeout(() => {
-      setNotificationPopups(prev => prev.filter(p => p.id !== id));
-    }, 10000);
-  };
-
-  const removeNotificationPopup = (id) => {
-    setNotificationPopups(prev => prev.filter(p => p.id !== id));
-  };
 
   // Check for notifications - runs once per day
   useEffect(() => {
@@ -193,8 +170,7 @@ const App = () => {
           if (lastCheckDate !== today) {
             const result = await checkAndSendNotifications(
               subscriptions,
-              profile,
-              showNotificationPopup
+              profile            
             );
 
             if (result.sent > 0) {
@@ -268,7 +244,7 @@ const App = () => {
         // IMMEDIATE NOTIFICATION CHECK for edited item
         setTimeout(async () => {
           console.log('🔄 Triggering immediate notification check for edited subscription...');
-          await checkAndSendNotifications(updated, profile, showNotificationPopup, true);
+          await checkAndSendNotifications(updated, profile, true, data.id);
         }, 500);
 
         return updated;
@@ -320,7 +296,7 @@ const App = () => {
         // IMMEDIATE NOTIFICATION CHECK for the new item
         setTimeout(async () => {
           console.log('🔄 Triggering immediate notification check for new subscription...');
-          const result = await checkAndSendNotifications(updated, profile, showNotificationPopup, true, newSub.id);
+          const result = await checkAndSendNotifications(updated, profile, true, newSub.id);
 
           if (result.sent === 0) {
             setShowSavedModal({ sub: newSub, reminderDays: profile.reminderDays });
@@ -625,20 +601,6 @@ const App = () => {
   return (
     <div className="min-h-screen bg-gray-50 p-2 sm:p-4 font-sans text-gray-900">
       <div className="max-w-2xl mx-auto">
-
-        {/* Notification Popups */}
-        <div className="fixed top-4 left-0 right-0 z-[200] px-2 sm:px-4 pointer-events-none">
-          <div className="max-w-sm ml-auto space-y-3 pointer-events-auto">
-            {notificationPopups.map(popup => (
-              <NotificationPopup
-                key={popup.id}
-                subscription={popup.subscription}
-                daysUntil={popup.daysUntil}
-                onClose={() => removeNotificationPopup(popup.id)}
-              />
-            ))}
-          </div>
-        </div>
 
         {/* Name Prompt Modal */}
         {showNamePrompt && (
