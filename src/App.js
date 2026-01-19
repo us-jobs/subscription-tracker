@@ -74,6 +74,9 @@ const App = () => {
       try {
         console.log('🚀 Initializing app...');
 
+        // Check if this is first launch
+        const { value: hasLaunched } = await Preferences.get({ key: 'hasLaunchedBefore' });
+        
         // Load all data in parallel
         const [loadedSubs, loadedProfile, loadedKey] = await Promise.all([
           loadSubscriptions(),
@@ -128,12 +131,24 @@ const App = () => {
       } catch (error) {
         console.error('❌ Failed to initialize app:', error);
         setNotification({
-          message: 'Failed to load data. Please restart the app.',
+          message: 'Failed to load data. Please restart app.',
           type: 'error'
         });
       } finally {
-        setIsLoading(false);
-        console.log('✅ App initialized');
+        // Only show loading screen on first launch
+        if (!hasLaunched) {
+          // Wait for 2.3 seconds total before hiding loading
+          setTimeout(() => {
+            setIsLoading(false);
+            console.log('✅ App initialized');
+          }, 2300);
+        } else {
+          setIsLoading(false);
+          console.log('✅ App reloaded');
+        }
+
+        // Mark as launched
+        await Preferences.set({ key: 'hasLaunchedBefore', value: 'true' });
       }
     };
 
@@ -590,7 +605,7 @@ const App = () => {
           <div className="text-2xl font-bold text-gray-800 mb-2">SubTrack</div>
           <div className="flex items-center justify-center gap-2">
             <Loader2 size={20} className="animate-spin text-indigo-600" />
-            <div className="text-sm text-gray-500">Loading your subscriptions...</div>
+            <div className="text-sm text-gray-500">Loading SubTrack...</div>
           </div>
         </div>
       </div>
@@ -809,7 +824,7 @@ const App = () => {
 
         <ImagePreview imageUrl={previewImage} onClose={() => setPreviewImage(null)} />
         {notification.message && (
-          <div className={`fixed bottom-6 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3 z-[100] animate-bounce-short w-max max-w-sm ${notification.type === 'error' ? 'bg-red-500 text-white' : 'bg-green-500 text-white'}`}>
+          <div className={`fixed bottom-6 left-1/2 transform -translate-x-1/2 px-8 py-3 rounded-xl shadow-2xl flex items-center gap-3 z-[100] animate-bounce-short w-max max-w-sm ${notification.type === 'error' ? 'bg-red-500 text-white' : 'bg-green-500 text-white'}`}>
             {notification.type === 'error' ? <AlertTriangle size={20} className="flex-shrink-0" /> : <Check size={20} className="flex-shrink-0" />}
             <span className="font-medium text-sm flex-1">{notification.message}</span>
             <button onClick={() => setNotification({ message: '', type: '' })} className="ml-2 opacity-80 hover:opacity-100 flex-shrink-0"><X size={16} /></button>
