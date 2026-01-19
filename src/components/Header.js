@@ -11,13 +11,6 @@ const Header = ({ userName, notificationsEnabled, onEditName, onRequestNotificat
 
             <div className="relative z-10 flex justify-between items-center">
                 <div>
-                    <div className="flex items-center gap-2 mb-2">
-                        <div className="bg-white/20 p-1.5 rounded-lg">
-                            <Wallet size={20} className="text-white" />
-                        </div>
-                        <span className="font-bold text-lg tracking-tight">SubTrack</span>
-                    </div>
-
                     <button
                         onClick={onEditName}
                         className="flex items-center gap-2 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-full transition text-sm font-medium"

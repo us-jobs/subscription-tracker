@@ -33,7 +33,7 @@ import {
   getApiKey,
   setApiKey
 } from './utils/storage';
-import { Camera, Upload, FileText, PieChart, List, AlertTriangle, Check, X, ShieldAlert, Download, Bell, Loader2 } from 'lucide-react';
+import { Camera, Upload, FileText, PieChart, List, AlertTriangle, Check, X, ShieldAlert, Download, Bell, Loader2, Heart } from 'lucide-react';
 
 const App = () => {
   // Data State
@@ -107,7 +107,14 @@ const App = () => {
         try {
           const { value } = await Preferences.get({ key: 'hasSeenTourV1' });
           if (value !== 'true') {
-            setShowTour(true);
+            // Only show tour after loading is complete
+            if (!hasLaunched) {
+              setTimeout(() => {
+                setShowTour(true);
+              }, 2500); // Show after loading animation
+            } else {
+              setShowTour(true);
+            }
           }
         } catch (error) {
           console.warn('Failed to check tour status:', error);
@@ -143,13 +150,13 @@ const App = () => {
           setTimeout(() => {
             setIsLoading(false);
             console.log('✅ App initialized');
-          }, 1800);
+          }, 2500);
         } else {
           // No loading screen on reload - go directly to app
           setTimeout(() => {
             setIsLoading(false);
             console.log('✅ App reloaded');
-          }, 800);
+          }, 1700);
         }
 
         // Mark as launched
@@ -606,11 +613,17 @@ const App = () => {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="text-6xl mb-4 animate-bounce">💳</div>
-          <div className="text-2xl font-bold text-gray-800 mb-2">SubTrack</div>
+          <div className="flex items-center justify-center mb-4 animate-bounce">
+            <img src="/logo.png" alt="SubTrack Logo" className="w-16 h-16" />
+          </div>
           <div className="flex items-center justify-center gap-2">
             <Loader2 size={20} className="animate-spin text-indigo-600" />
             <div className="text-sm text-gray-500">Loading SubTrack...</div>
+          </div>
+          <div className="mt-4 text-xs text-gray-400 animate-pluse flex items-center justify-center gap-1">
+            Made 
+            {/* with <Heart size={12} className="text-red-500" />  */}
+            By Sushil
           </div>
         </div>
       </div>
