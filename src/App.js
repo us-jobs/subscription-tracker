@@ -143,10 +143,13 @@ const App = () => {
           setTimeout(() => {
             setIsLoading(false);
             console.log('✅ App initialized');
-          }, 2300);
+          }, 1800);
         } else {
           // No loading screen on reload - go directly to app
-          console.log('✅ App reloaded');
+          setTimeout(() => {
+            setIsLoading(false);
+            console.log('✅ App reloaded');
+          }, 800);
         }
 
         // Mark as launched
