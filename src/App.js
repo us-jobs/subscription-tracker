@@ -143,6 +143,7 @@ const App = () => {
   // Save Data when changed
   useEffect(() => {
     if (!isLoading && subscriptions.length >= 0) {
+      console.log('🔄 Saving subscriptions due to change:', { count: subscriptions.length, isLoading });
       saveSubscriptions(subscriptions);
     }
   }, [subscriptions, isLoading]);
@@ -605,7 +606,7 @@ const App = () => {
           <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
             <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm animate-fade-in">
               <h2 className="text-xl font-bold mb-2">Welcome! 👋</h2>
-              <p className="text-gray-600 mb-6 text-sm">Let's get to know you. What should we call you?</p>
+              <p className="text-gray-600 mb-6 text-sm">Let's get to know you. Your Name?</p>
               <input
                 className="w-full border border-gray-300 p-3 rounded-xl mb-4 focus:ring-2 focus:ring-indigo-500 outline-none transition"
                 placeholder="Enter your name"

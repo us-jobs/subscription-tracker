@@ -26,7 +26,10 @@ export const loadSubscriptions = async () => {
         }
 
         const { value } = await storage.get({ key: 'subscriptions' });
-        return value ? JSON.parse(value) : [];
+        console.log('📱 Loading subscriptions:', { value, isNative });
+        const parsed = value ? JSON.parse(value) : [];
+        console.log('📱 Parsed subscriptions:', parsed.length, parsed);
+        return parsed;
     } catch (e) {
         console.error('Failed to load subscriptions', e);
         return [];
@@ -41,10 +44,13 @@ export const saveSubscriptions = async (subscriptions) => {
             return;
         }
 
+        const value = JSON.stringify(subscriptions);
+        console.log('💾 Saving subscriptions:', { count: subscriptions.length, isNative, value });
         await storage.set({
             key: 'subscriptions',
-            value: JSON.stringify(subscriptions)
+            value: value
         });
+        console.log('✅ Subscriptions saved successfully');
     } catch (e) {
         console.error('Failed to save subscriptions', e);
     }

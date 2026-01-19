@@ -213,7 +213,7 @@ export const checkAndSendNotifications = async (
 
 export const sendTestNotification = async () => {
     const notificationTitle = '🔔 Test Notification';
-    const notificationBody = 'Success! Notifications are working correctly on your device.';
+    const notificationBody = 'Success! Notifications are working!';
 
     try {
         if (isNative) {
