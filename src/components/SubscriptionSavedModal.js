@@ -8,8 +8,8 @@ const SubscriptionSavedModal = ({ onClose, subscription, reminderDays }) => {
     const handleTestNotification = async () => {
         setStatus('loading');
 
-        // Simulate a longer delay as requested (6 seconds)
-        await new Promise(resolve => setTimeout(resolve, 6000));
+        // Simulate a longer delay as requested (3 seconds)
+        await new Promise(resolve => setTimeout(resolve, 3000));
 
         const success = await sendCustomNotification(
             'Subscription Added Successfully',

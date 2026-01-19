@@ -145,7 +145,7 @@ const App = () => {
             console.log('✅ App initialized');
           }, 2300);
         } else {
-          setIsLoading(false);
+          // No loading screen on reload - go directly to app
           console.log('✅ App reloaded');
         }
 
@@ -826,7 +826,7 @@ const App = () => {
 
         <ImagePreview imageUrl={previewImage} onClose={() => setPreviewImage(null)} />
         {notification.message && (
-          <div className={`fixed bottom-6 left-1/2 transform -translate-x-1/2 px-8 py-3 rounded-xl shadow-2xl flex items-center gap-3 z-[100] animate-bounce-short w-max max-w-sm ${notification.type === 'error' ? 'bg-red-500 text-white' : 'bg-green-500 text-white'}`}>
+          <div className={`fixed bottom-6 left-1/2 transform -translate-x-1/2 px-2 py-3 rounded-xl shadow-2xl flex items-center gap-3 z-[100] animate-bounce-short w-max max-w-xs ${notification.type === 'error' ? 'bg-red-500 text-white' : 'bg-green-500 text-white'}`}>
             {notification.type === 'error' ? <AlertTriangle size={20} className="flex-shrink-0" /> : <Check size={20} className="flex-shrink-0" />}
             <span className="font-medium text-sm flex-1">{notification.message}</span>
             <button onClick={() => setNotification({ message: '', type: '' })} className="ml-2 opacity-80 hover:opacity-100 flex-shrink-0"><X size={16} /></button>
