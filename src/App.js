@@ -71,11 +71,13 @@ const App = () => {
   // Initialize app - Load all data
   useEffect(() => {
     const initializeApp = async () => {
+      let hasLaunched = false;
       try {
         console.log('🚀 Initializing app...');
 
         // Check if this is first launch
-        const { value: hasLaunched } = await Preferences.get({ key: 'hasLaunchedBefore' });
+        const { value } = await Preferences.get({ key: 'hasLaunchedBefore' });
+        hasLaunched = value;
         
         // Load all data in parallel
         const [loadedSubs, loadedProfile, loadedKey] = await Promise.all([
