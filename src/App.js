@@ -18,17 +18,17 @@ import { Capacitor } from '@capacitor/core';
 import { Preferences } from '@capacitor/preferences';
 
 import { processImageWithGemini } from './utils/geminiProcessor';
-import { 
-  checkAndSendNotifications, 
+import {
+  checkAndSendNotifications,
   sendTestNotification,
   getLastNotificationCheck,
   setLastNotificationCheck
 } from './utils/notificationService';
 
-import { 
-  loadSubscriptions, 
-  saveSubscriptions, 
-  loadUserProfile, 
+import {
+  loadSubscriptions,
+  saveSubscriptions,
+  loadUserProfile,
   saveUserProfile,
   getApiKey,
   setApiKey
@@ -73,7 +73,7 @@ const App = () => {
     const initializeApp = async () => {
       try {
         console.log('🚀 Initializing app...');
-        
+
         // Load all data in parallel
         const [loadedSubs, loadedProfile, loadedKey] = await Promise.all([
           loadSubscriptions(),
@@ -127,9 +127,9 @@ const App = () => {
 
       } catch (error) {
         console.error('❌ Failed to initialize app:', error);
-        setNotification({ 
-          message: 'Failed to load data. Please restart the app.', 
-          type: 'error' 
+        setNotification({
+          message: 'Failed to load data. Please restart the app.',
+          type: 'error'
         });
       } finally {
         setIsLoading(false);
@@ -170,12 +170,10 @@ const App = () => {
           if (lastCheckDate !== today) {
             const result = await checkAndSendNotifications(
               subscriptions,
-              profile            
+              profile
             );
-
-            if (result.sent > 0) {
-              await setLastNotificationCheck(today);
-            }
+            // Set last check date to today, regardless of whether notifications were sent
+            await setLastNotificationCheck(today);
           }
         } catch (error) {
           console.warn('Failed to check notifications:', error);
@@ -184,7 +182,7 @@ const App = () => {
     };
 
     checkNotifications();
-  }, [profile.notificationsEnabled, profile.reminderDays, subscriptions.length]);
+  }, [profile.notificationsEnabled, profile.reminderDays]); // Removed subscriptions.length from dependencies
 
   const handleSaveSettings = async (key) => {
     const cleanKey = key ? key.trim() : '';
@@ -289,7 +287,7 @@ const App = () => {
         status: 'active',
         nextBillingDate: new Date(data.nextBillingDate).toISOString().split('T')[0]
       };
-      
+
       setSubscriptions(prev => {
         const updated = [...prev, newSub];
 
@@ -430,22 +428,22 @@ const App = () => {
   };
 
   const calculateTotals = () => {
-    const cycles = { 
-      weekly: 0.23, 
-      biweekly: 0.46, 
-      monthly: 1, 
-      bimonthly: 2, 
-      quarterly: 3, 
-      semiannually: 6, 
-      yearly: 12, 
-      biennially: 24 
+    const cycles = {
+      weekly: 0.23,
+      biweekly: 0.46,
+      monthly: 1,
+      bimonthly: 2,
+      quarterly: 3,
+      semiannually: 6,
+      yearly: 12,
+      biennially: 24
     };
-    const monthly = subscriptions.reduce((sum, sub) => 
+    const monthly = subscriptions.reduce((sum, sub) =>
       sum + (parseFloat(sub.cost || 0) / (cycles[sub.billingCycle] || 1)), 0
     );
-    return { 
-      monthly: monthly.toFixed(2), 
-      yearly: (monthly * 12).toFixed(2) 
+    return {
+      monthly: monthly.toFixed(2),
+      yearly: (monthly * 12).toFixed(2)
     };
   };
 
@@ -565,7 +563,7 @@ const App = () => {
 
     setShowNotificationSettings(false);
     setTimeout(() => setNotification({ message: '', type: '' }), 3000);
-    
+
     try {
       await Preferences.remove({ key: 'lastNotificationCheck' });
     } catch (error) {
@@ -746,7 +744,7 @@ const App = () => {
             onUploadDifferent={() => fileInputRef.current?.click()}
           />
         )}
-        
+
         {(view === 'list' || view === 'analytics') && (
           <>
             <SummaryCards totals={calculateTotals()} count={subscriptions.length} />
